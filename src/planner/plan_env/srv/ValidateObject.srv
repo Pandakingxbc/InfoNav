@@ -1,0 +1,15 @@
+# ValidateObject.srv
+# Service for VLM-based object validation using Qwen-VL API
+# Supports multi-view validation with AND logic to reduce false positives
+
+# Request
+string target_object    # Target object name (e.g., "tv", "chair", "bed")
+int32 num_views         # Number of views to validate (1-3, default=2 for multi-view AND logic)
+                        # If 0 or unset, uses current single image (backward compatible)
+---
+# Response
+bool is_valid           # Whether the target object is confirmed (AND logic: all views must confirm)
+float64 confidence      # Overall confidence score (minimum of all view confidences)
+string raw_response     # Combined raw VLM responses for debugging
+int32 views_confirmed   # Number of views that confirmed the object
+int32 views_total       # Total number of views validated

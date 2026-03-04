@@ -1,0 +1,6 @@
+couch: ['chair', 'bed', 'bench', 'dining table']
+tv: ['laptop', 'picture frame', 'window', 'couch']
+chair: ['couch', 'toilet', 'potted plant', 'bench', 'dining table']
+toilet: ['chair', 'bench', 'sink', 'potted plant']
+bed: ['couch', 'dining table', 'bench']
+potted plant: ['lamp', 'teddy bear', 'toilet', 'dining table']

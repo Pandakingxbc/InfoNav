@@ -1,0 +1,35 @@
+<launch>
+    <!--
+    Multi-Source Semantic Value Map Launch File
+
+    This launch file starts the multi-source ITM query node for semantic value mapping.
+
+    Prerequisites:
+    - BLIP2 ITM server must be running on port 12182
+    - Habitat or camera must be publishing RGB images
+
+    Usage:
+        roslaunch exploration_manager multi_source_semantic.launch
+    -->
+
+    <arg name="blip2_port" default="12182" />
+    <arg name="rgb_topic" default="/habitat/camera_rgb" />
+    <arg name="query_rate" default="5.0" />
+    <arg name="use_cosine" default="false" />
+
+    <!-- Multi-Source ITM Query Node -->
+    <node pkg="plan_env" type="multi_source_itm_node.py" name="multi_source_itm_node" output="screen">
+        <param name="blip2_port" value="$(arg blip2_port)" />
+        <param name="rgb_topic" value="$(arg rgb_topic)" />
+        <param name="query_rate" value="$(arg query_rate)" />
+        <param name="use_cosine" value="$(arg use_cosine)" />
+    </node>
+
+    <!-- Optional: Launch test semantic prompts publisher -->
+    <!-- Uncomment to automatically publish test prompts -->
+    <!--
+    <node pkg="plan_env" type="test_semantic_prompts.py" name="test_semantic_prompts"
+          output="screen" launch-prefix="bash -c 'sleep 2.0; $0 $@'" />
+    -->
+
+</launch>

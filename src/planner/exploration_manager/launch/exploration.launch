@@ -1,0 +1,66 @@
+<launch>
+  <!-- Dataset selection: hm3dv1, hm3dv2, or mp3d -->
+  <arg name="dataset" default="hm3dv2"/>
+
+  <!-- size of map, change the size in x, y according to your application -->
+  <arg name="map_size_x" value="80.0"/>
+  <arg name="map_size_y" value="80.0"/>
+
+  <arg name="is_sim" value="true"/>
+
+  <!-- VLM Validation: set to true to enable VLM-based object validation -->
+  <arg name="vlm_validation_enabled" default="false"/>
+
+  <!-- topic of your odometry such as VIO or LIO -->
+  <arg name="odom_topic" value="/habitat/odom" />
+  <!-- transform of camera frame in the world frame -->
+  <arg name="sensor_pose_topic" value="/habitat/sensor_pose"/>
+  <!-- depth image, 640x480 by default -->
+  <arg name="depth_topic" value="/habitat/camera_depth"/>
+
+  <!-- Load dataset-specific YAML config -->
+  <group if="$(arg is_sim)">
+    <rosparam file="$(find exploration_manager)/../../../config/habitat_eval_$(arg dataset).yaml" command="load" />
+  </group>
+
+  <!-- main algorithm params - select based on dataset -->
+  <!-- For MP3D, use algorithm_mp3d.xml; for HM3D, use algorithm.xml -->
+
+  <!-- HM3D datasets (hm3dv1, hm3dv2) use algorithm.xml -->
+  <include file="$(find exploration_manager)/launch/algorithm.xml" unless="$(eval dataset == 'mp3d')">
+    <arg name="map_size_x_" value="$(arg map_size_x)"/>
+    <arg name="map_size_y_" value="$(arg map_size_y)"/>
+
+    <arg name="odometry_topic_" value="$(arg odom_topic)"/>
+    <arg name="sensor_pose_topic_" value="$(arg sensor_pose_topic)"/>
+    <arg name="depth_topic_" value="$(arg depth_topic)"/>
+
+    <!-- intrinsic params of the depth camera -->
+    <arg name="cx_" value="320"/>
+    <arg name="cy_" value="240"/>
+    <arg name="fx_" value="388.1910413097385"/>
+    <arg name="fy_" value="422.0475153598262"/>
+
+    <!-- VLM Validation -->
+    <arg name="vlm_validation_enabled_" value="$(arg vlm_validation_enabled)"/>
+  </include>
+
+  <!-- MP3D dataset uses algorithm_mp3d.xml with MP3D-specific thresholds -->
+  <include file="$(find exploration_manager)/launch/algorithm_mp3d.xml" if="$(eval dataset == 'mp3d')">
+    <arg name="map_size_x_" value="$(arg map_size_x)"/>
+    <arg name="map_size_y_" value="$(arg map_size_y)"/>
+
+    <arg name="odometry_topic_" value="$(arg odom_topic)"/>
+    <arg name="sensor_pose_topic_" value="$(arg sensor_pose_topic)"/>
+    <arg name="depth_topic_" value="$(arg depth_topic)"/>
+
+    <!-- intrinsic params of the depth camera -->
+    <arg name="cx_" value="320"/>
+    <arg name="cy_" value="240"/>
+    <arg name="fx_" value="388.1910413097385"/>
+    <arg name="fy_" value="422.0475153598262"/>
+
+    <!-- VLM Validation -->
+    <arg name="vlm_validation_enabled_" value="$(arg vlm_validation_enabled)"/>
+  </include>
+</launch>

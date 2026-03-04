@@ -1,0 +1,73 @@
+# Data and datasets
+data/
+data
+
+# Debug and outputs
+debug/
+outputs/
+outputs
+
+# Python cache
+__pycache__/
+*.egg-info
+*.pyc
+*.pyo
+
+# Build artifacts
+build/
+devel/
+install/
+lockfiles/
+
+# IDE and workspace
+.catkin_workspace
+.vscode/
+
+# External libraries (large)
+yolov7/
+GroundingDINO/
+habitat-lab/
+
+# Model weights and checkpoints
+traced_model.pt
+*.pth
+*.pt
+*.ckpt
+*.bin
+weights/
+pretrained_weights/
+checkpoints/
+
+# LKH solver temp files
+*.atsp
+*.tour
+*.par
+
+# Logging and monitoring
+bag/
+wandb/
+logs/
+tmp/
+
+# Python virtual environment
+env/
+venv/
+
+# Catkin tools
+.catkin_tools/
+
+# Videos and media (large files)
+videos/
+*.mp4
+*.avi
+*.mov
+
+# Test results and generated files
+*.png
+test_*_results.png
+
+# Habitat environment data
+env/
+
+# PDF and documentation artifacts
+*.pdf

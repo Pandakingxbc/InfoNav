@@ -1,0 +1,93 @@
+# Logging Configuration for ApexNav
+# Controls verbosity levels across Python and ROS components
+#
+# Usage: Set environment variables before running evaluation
+# export APEXNAV_LOG_LEVEL=MINIMAL
+# export APEXNAV_VLM_DETAIL=false
+# export APEXNAV_TIMING_DETAIL=false
+
+# Log levels: VERBOSE, NORMAL, MINIMAL, SILENT
+# VERBOSE: All debug info, timing breakdowns, VLM details, semantic scores
+# NORMAL: Basic progress info, episode summaries, major events (default)
+# MINIMAL: Only episode results and errors
+# SILENT: Errors only
+
+logging:
+  # Global log level (can be overridden by environment variable APEXNAV_LOG_LEVEL)
+  global_level: "NORMAL"
+
+  # Component-specific settings
+  components:
+    # VLM (Vision-Language Model) logging
+    vlm:
+      # Show detailed VLM timing (Prompt Build, BLIP2 Inference, Assembly)
+      show_detail: false  # Override with APEXNAV_VLM_DETAIL env var
+      # Show multi-source semantic scores for each hypothesis
+      show_semantic_scores: false  # Override with APEXNAV_SEMANTIC_SCORES env var
+
+    # Performance timing breakdown
+    timing:
+      # Show detailed timing breakdown per step
+      show_step_breakdown: false  # Override with APEXNAV_TIMING_DETAIL env var
+      # Show only total step time
+      show_summary_only: true
+      # Print timing every N steps (0 = every step)
+      print_interval: 10
+
+    # Object detection logging
+    detection:
+      # Show detection results summary
+      show_summary: true
+      # Show detailed bounding boxes and scores
+      show_detail: false
+
+    # Record file management
+    record:
+      # Enable automatic file rotation when size exceeds limit
+      enable_rotation: true
+      # Max file size before rotation (MB)
+      max_size_mb: 5
+      # Number of rotated files to keep
+      keep_rotations: 3
+      # Archive old records to compressed format
+      compress_archives: true
+
+  # ROS logging levels
+  ros:
+    # rosconsole log level: DEBUG, INFO, WARN, ERROR, FATAL
+    default_level: "INFO"
+    # Throttle repeated messages (seconds)
+    throttle_period: 10.0
+    # Specific node overrides
+    nodes:
+      map_ros: "INFO"
+      exploration_fsm: "INFO"
+      multi_source_value_map: "WARN"
+
+# Per log level configurations
+levels:
+  VERBOSE:
+    vlm_detail: true
+    semantic_scores: true
+    timing_breakdown: true
+    ros_debug: true
+
+  NORMAL:
+    vlm_detail: false
+    semantic_scores: false
+    timing_breakdown: false
+    ros_debug: false
+
+  MINIMAL:
+    vlm_detail: false
+    semantic_scores: false
+    timing_breakdown: false
+    ros_debug: false
+    episode_summary: true
+
+  SILENT:
+    vlm_detail: false
+    semantic_scores: false
+    timing_breakdown: false
+    ros_debug: false
+    episode_summary: false
