@@ -104,7 +104,22 @@ pip install -e .
 
 **Note:** Any numpy-related errors will not affect subsequent operations, as long as `numpy==1.23.5` and `numba==0.60.0` are correctly installed.
 
-### 3. Build ROS Packages
+### 3. Environment Variables
+
+Set up the DeepSeek API key for LLM hypothesis analysis:
+```bash
+export DEEPSEEK_API_KEY="your_api_key_here"
+```
+
+You can add this to your `~/.bashrc` to make it persistent:
+```bash
+echo 'export DEEPSEEK_API_KEY="your_api_key_here"' >> ~/.bashrc
+source ~/.bashrc
+```
+
+> You can skip this and use our pre-generated LLM output results in `llm/answers/` instead.
+
+### 4. Build ROS Packages
 
 ```bash
 # Install ROS Noetic first: http://wiki.ros.org/noetic/Installation/Ubuntu
@@ -202,17 +217,36 @@ Note that `train` and `val_mini` are not required and you can choose to delete t
 
 ### Quick Start
 
-1. **Start ROS Core**
+1. **Start VLM Servers**
+
+The system relies on several VLM servers (GroundingDINO, BLIP2-ITM, SAM, YOLOv7, D-FINE). Start them all at once using the provided script:
+```bash
+# Requires tmux: sudo apt-get install tmux
+chmod +x scripts/start_vlm_servers.sh
+./scripts/start_vlm_servers.sh start infonav
+```
+
+Wait until all servers finish loading (monitor with `tmux attach -t vlm_servers`). Server URLs:
+- GroundingDINO: `http://localhost:12181`
+- BLIP2-ITM:     `http://localhost:12182`
+- SAM:           `http://localhost:12183`
+- YOLOv7:        `http://localhost:12184`
+- D-FINE:        `http://localhost:12185`
+
+To stop servers: `./scripts/start_vlm_servers.sh stop`
+
+2. **Start ROS Core**
 ```bash
 roscore
 ```
 
-2. **Launch Exploration Node**
+3. **Launch Exploration Node**
 ```bash
+source devel/setup.bash
 roslaunch exploration_manager exploration.launch
 ```
 
-3. **Run Evaluation**
+4. **Run Evaluation**
 ```bash
 python habitat_evaluation.py --config config/habitat_eval_hm3dv2.yaml
 ```
