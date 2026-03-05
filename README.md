@@ -4,7 +4,11 @@
 
 > **Paper:** Coming soon
 
-📄 [Architecture Overview (PDF)](airchitecture.pdf)
+## Architecture
+
+![Architecture Overview](assets/architecture.png)
+
+📄 [Download PDF](assets/architecture.pdf)
 
 ## TODO
 
