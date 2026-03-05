@@ -1,4 +1,4 @@
-#!/home/yangz/miniconda3/envs/infonav/bin/python
+#!/usr/bin/env python3
 """
 VLM Approach Verifier Node
 

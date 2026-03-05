@@ -4,8 +4,9 @@ import httpx
 
 # 创建不使用代理的 HTTP 客户端
 http_client = httpx.Client(proxy=None)
+import os
 client = OpenAI(
-    api_key="write your api key here",
+    api_key=os.getenv("DEEPSEEK_API_KEY", ""),
     base_url="https://api.deepseek.com",
     http_client=http_client
 )

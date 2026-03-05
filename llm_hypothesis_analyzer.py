@@ -384,13 +384,13 @@ class LLMHypothesisAnalyzer:
     """LLM假说分析器 - 支持 Ollama 和 DeepSeek API"""
 
     # DeepSeek API 配置
-    DEEPSEEK_API_KEY = "sk-c012459659cb402db7a3e9bdfa2a7c62"
+    DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
     DEEPSEEK_API_URL = "https://api.deepseek.com/chat/completions"
 
     def __init__(self,
                  api_url: str = "https://api.deepseek.com/chat/completions",
                  model: str = "deepseek-chat",
-                 env_base_dir: str = "/home/yangz/Nav/ApexNav/env",
+                 env_base_dir: str = "env",
                  api_key: Optional[str] = None):
         """
         Args:
@@ -1335,7 +1335,7 @@ def main():
                                help='LLM 模型名称 (默认: deepseek-chat)')
     single_parser.add_argument('--temperature', type=float, default=0.3,
                                help='生成温度 0.0-1.0 (默认: 0.3)')
-    single_parser.add_argument('--env-base-dir', type=str, default='/home/yangz/Nav/InfoNav/env',
+    single_parser.add_argument('--env-base-dir', type=str, default='env',
                                help='环境数据集根目录')
     single_parser.add_argument('--output-format', type=str, default='both',
                                choices=['json', 'text', 'both'],
@@ -1360,7 +1360,7 @@ def main():
                               help='LLM 模型名称 (默认: deepseek-chat)')
     batch_parser.add_argument('--temperature', type=float, default=0.2,
                               help='生成温度 0.0-1.0 (默认: 0.2)')
-    batch_parser.add_argument('--env-base-dir', type=str, default='/home/yangz/Nav/InfoNav/env',
+    batch_parser.add_argument('--env-base-dir', type=str, default='env',
                               help='环境数据集根目录')
     batch_parser.add_argument('--output-format', type=str, default='both',
                               choices=['json', 'text', 'both'],
@@ -1385,7 +1385,7 @@ def main():
                               help='LLM 模型名称 (默认: deepseek-chat)')
     retry_parser.add_argument('--temperature', type=float, default=0.3,
                               help='生成温度 0.0-1.0 (默认: 0.3)')
-    retry_parser.add_argument('--env-base-dir', type=str, default='/home/yangz/Nav/InfoNav/env',
+    retry_parser.add_argument('--env-base-dir', type=str, default='env',
                               help='环境数据集根目录')
     retry_parser.add_argument('--output-format', type=str, default='both',
                               choices=['json', 'text', 'both'],

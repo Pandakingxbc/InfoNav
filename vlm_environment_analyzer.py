@@ -127,7 +127,7 @@ class VLMEnvironmentAnalyzer:
     def __init__(self,
                  api_url: str = "http://localhost:20004/api/chat",
                  model: str = "qwen3-vl:32b",
-                 env_base_dir: str = "/home/yangz/Nav/ApexNav/env",
+                 env_base_dir: str = "env",
                  timeout: int = 300,
                  api_type: str = "ollama"):
         """
@@ -684,7 +684,7 @@ def main():
                                help='生成温度 0.0-1.0 (默认: 0.2)')
     single_parser.add_argument('--timeout', type=int, default=600,
                                help='请求超时时间（秒），默认600秒')
-    single_parser.add_argument('--env-base-dir', type=str, default='/home/yangz/Nav/ApexNav/env',
+    single_parser.add_argument('--env-base-dir', type=str, default='env',
                                help='环境数据集根目录')
     single_parser.add_argument('--output', type=str, default=None,
                                help='输出文件路径（默认自动保存到任务目录）')
@@ -713,7 +713,7 @@ def main():
                               help='生成温度 0.0-1.0 (默认: 0.2)')
     batch_parser.add_argument('--timeout', type=int, default=600,
                               help='请求超时时间（秒），默认600秒')
-    batch_parser.add_argument('--env-base-dir', type=str, default='/home/yangz/Nav/ApexNav/env',
+    batch_parser.add_argument('--env-base-dir', type=str, default='env',
                               help='环境数据集根目录')
 
     args = parser.parse_args()

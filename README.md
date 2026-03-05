@@ -4,12 +4,9 @@
 
 > **Paper:** Coming soon
 
-📄 [Architecture Overview (PDF)](airchitecture.pdf)
+## Architecture
 
-## TODO
-
-- [ ] Release real-world deployment code
-- [ ] Release ROS2 support version
+![Architecture Overview](assets/architecture.png)
 
 ## Overview
 
@@ -182,3 +179,8 @@ This project builds upon several excellent open-source projects:
 ## Contact
 
 For questions or issues, please open an issue on GitHub.
+
+## TODO
+
+- [ ] Release real-world deployment code
+- [ ] Release ROS2 support version
