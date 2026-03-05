@@ -22,8 +22,8 @@ InfoNav is built on top of [Habitat-Sim](https://github.com/facebookresearch/hab
 
 ## System Requirements
 
-- **OS**: Ubuntu 20.04 / 22.04
-- **GPU**: NVIDIA GPU with CUDA support (RTX 3090 or higher recommended)
+- **OS**: Ubuntu 20.04
+- **GPU**: NVIDIA GPU with CUDA support and 8GB+ VRAM (tested on RTX 4070 Ti)
 - **Python**: 3.9+
 - **ROS**: ROS Noetic
 
