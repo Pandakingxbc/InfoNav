@@ -29,77 +29,174 @@ InfoNav is built on top of [Habitat-Sim](https://github.com/facebookresearch/hab
 
 ## Installation
 
-### 1. Create Conda Environment
+### 1. Prerequisites
 
+#### 1.1 System Dependencies
 ```bash
-# Create environment with Habitat-Sim
-conda create -n infonav python=3.9 habitat-sim=0.3.1 withbullet -c conda-forge -c aihabitat
-
-conda activate infonav
+sudo apt update
+sudo apt-get install libarmadillo-dev libompl-dev
 ```
 
-### 2. Install ROS Noetic
-
-Follow the official [ROS Noetic installation guide](http://wiki.ros.org/noetic/Installation/Ubuntu).
-
-### 3. Clone Repository
-
+#### 1.2 External Code Dependencies
 ```bash
-git clone https://github.com/Pandakingxbc/InfoNav.git
+git clone git@github.com:WongKinYiu/yolov7.git        # yolov7
+git clone https://github.com/IDEA-Research/GroundingDINO.git  # GroundingDINO
+```
+
+#### 1.3 Model Weights Download
+
+Download the following model weights and place them in the `data/` directory:
+- `mobile_sam.pt`: https://github.com/ChaoningZhang/MobileSAM/tree/master/weights/mobile_sam.pt
+- `groundingdino_swint_ogc.pth`:
+  ```bash
+  wget -O data/groundingdino_swint_ogc.pth https://github.com/IDEA-Research/GroundingDINO/releases/download/v0.1.0-alpha/groundingdino_swint_ogc.pth
+  ```
+- `yolov7-e6e.pt`:
+  ```bash
+  wget -O data/yolov7-e6e.pt https://github.com/WongKinYiu/yolov7/releases/download/v0.1/yolov7-e6e.pt
+  ```
+
+### 2. Setup Python Environment
+
+#### 2.1 Clone Repository
+```bash
+git clone git@github.com:Pandakingxbc/InfoNav.git
 cd InfoNav
 ```
 
-### 4. Install Python Dependencies
-
+#### 2.2 Create Conda Environment
 ```bash
+conda env create -f infonav_environment.yaml -y
+conda activate infonav
+```
+
+#### 2.3 PyTorch
+```bash
+# You can use 'nvcc --version' to check your CUDA version.
+# CUDA 11.8
+pip install torch==2.5.0 torchvision==0.20.0 torchaudio==2.5.0 --index-url https://download.pytorch.org/whl/cu118
+# CUDA 12.1
+pip install torch==2.5.0 torchvision==0.20.0 torchaudio==2.5.0 --index-url https://download.pytorch.org/whl/cu121
+# CUDA 12.4
+pip install torch==2.5.0 torchvision==0.20.0 torchaudio==2.5.0 --index-url https://download.pytorch.org/whl/cu124
+```
+
+#### 2.4 Habitat Simulator
+> We recommend using habitat-lab v0.3.1
+```bash
+# habitat-lab v0.3.1
+git clone https://github.com/facebookresearch/habitat-lab.git
+cd habitat-lab; git checkout tags/v0.3.1;
+pip install -e habitat-lab
+
+# habitat-baselines v0.3.1
+pip install -e habitat-baselines
+```
+
+**Note:** Any numpy-related errors will not affect subsequent operations, as long as `numpy==1.23.5` and `numba==0.60.0` are correctly installed.
+
+#### 2.5 Others
+```bash
+pip install salesforce-lavis==1.0.2
+cd ..  # Return to InfoNav directory
 pip install -e .
 ```
 
-This will install all required dependencies including:
-- `transformers`, `timm` - Deep learning models
-- `open3d` - 3D point cloud processing
-- `opencv-python` - Image processing
-- `openai`, `ollama` - LLM clients
-- `groundingdino`, `mobile_sam` - VLM models
+**Note:** Any numpy-related errors will not affect subsequent operations, as long as `numpy==1.23.5` and `numba==0.60.0` are correctly installed.
 
-### 5. Build ROS Packages
+### 3. Build ROS Packages
 
 ```bash
-# Initialize catkin workspace
+# Install ROS Noetic first: http://wiki.ros.org/noetic/Installation/Ubuntu
 catkin init
 catkin config --extend /opt/ros/noetic
-
-# Build
 catkin build
 source devel/setup.bash
 ```
 
-### 6. Download Model Weights
+## 📥 Datasets Download
+> Official Reference: https://github.com/facebookresearch/habitat-lab/blob/main/DATASETS.md
 
-Download the required model weights:
+### 🏠 Scene Datasets
+**Note:** Both HM3D and MP3D scene datasets require applying for official permission first.
 
+#### HM3D Scene Dataset
+1. Apply for permission at https://matterport.com/habitat-matterport-3d-research-dataset.
+2. Download https://api.matterport.com/resources/habitat/hm3d-val-habitat-v0.2.tar.
+3. Save `hm3d-val-habitat-v0.2.tar` to the `InfoNav/` directory, then run:
 ```bash
-# GroundingDINO weights
-mkdir -p weights
-wget -P weights/ https://github.com/IDEA-Research/GroundingDINO/releases/download/v0.1.0-alpha/groundingdino_swint_ogc.pth
-
-# Additional model weights (RedNet, etc.)
-# Please refer to the respective model repositories
+mkdir -p data/scene_datasets/hm3d/val
+mv hm3d-val-habitat-v0.2.tar data/scene_datasets/hm3d/val/
+cd data/scene_datasets/hm3d/val
+tar -xvf hm3d-val-habitat-v0.2.tar
+rm hm3d-val-habitat-v0.2.tar
+cd ../..
+ln -s hm3d hm3d_v0.2  # Create a symbolic link for hm3d_v0.2
 ```
 
-### 7. Download Dataset
+#### MP3D Scene Dataset
+1. Apply for download access at https://niessner.github.io/Matterport/.
+2. After successful application, you will receive a `download_mp.py` script, which should be run with `python2.7` to download the dataset.
+3. After downloading, place the files in `InfoNav/data/scene_datasets`.
 
-Download HM3D or MP3D dataset following [Habitat documentation](https://github.com/facebookresearch/habitat-sim/blob/main/DATASETS.md).
-
+### 🎯 Task Datasets
 ```bash
-# Example directory structure
-data/
-└── scene_datasets/
-    └── hm3d/
-        ├── train/
-        ├── val/
-        └── ...
+# Create necessary directory structure
+mkdir -p data/datasets/objectnav/hm3d
+mkdir -p data/datasets/objectnav/mp3d
+
+# HM3D-v0.1
+wget -O data/datasets/objectnav/hm3d/v1.zip https://dl.fbaipublicfiles.com/habitat/data/datasets/objectnav/hm3d/v1/objectnav_hm3d_v1.zip
+unzip data/datasets/objectnav/hm3d/v1.zip -d data/datasets/objectnav/hm3d && mv data/datasets/objectnav/hm3d/objectnav_hm3d_v1 data/datasets/objectnav/hm3d/v1 && rm data/datasets/objectnav/hm3d/v1.zip
+
+# HM3D-v0.2
+wget -O data/datasets/objectnav/hm3d/v2.zip https://dl.fbaipublicfiles.com/habitat/data/datasets/objectnav/hm3d/v2/objectnav_hm3d_v2.zip
+unzip data/datasets/objectnav/hm3d/v2.zip -d data/datasets/objectnav/hm3d && mv data/datasets/objectnav/hm3d/objectnav_hm3d_v2 data/datasets/objectnav/hm3d/v2 && rm data/datasets/objectnav/hm3d/v2.zip
+
+# MP3D
+wget -O data/datasets/objectnav/mp3d/v1.zip https://dl.fbaipublicfiles.com/habitat/data/datasets/objectnav/m3d/v1/objectnav_mp3d_v1.zip
+unzip data/datasets/objectnav/mp3d/v1.zip -d data/datasets/objectnav/mp3d/v1 && rm data/datasets/objectnav/mp3d/v1.zip
 ```
+
+<details>
+<summary>Make sure that the folder <code>data</code> has the following structure:</summary>
+
+```
+data
+├── datasets
+│   └── objectnav
+│       ├── hm3d
+│       │   ├── v1
+│       │   │   ├── train
+│       │   │   ├── val
+│       │   │   └── val_mini
+│       │   └── v2
+│       │       ├── train
+│       │       ├── val
+│       │       └── val_mini
+│       └── mp3d
+│           └── v1
+│               ├── train
+│               ├── val
+│               └── val_mini
+├── scene_datasets
+│   ├── hm3d
+│   │   └── val
+│   │       ├── 00800-TEEsavR23oF
+│   │       ├── 00801-HaxA7YrQdEC
+│   │       └── .....
+│   ├── hm3d_v0.2 -> hm3d
+│   └── mp3d
+│       ├── 17DRP5sb8fy
+│       ├── 1LXtFkjw3qL
+│       └── .....
+├── groundingdino_swint_ogc.pth
+├── mobile_sam.pt
+└── yolov7-e6e.pt
+```
+
+Note that `train` and `val_mini` are not required and you can choose to delete them.
+</details>
 
 ## Usage
 
