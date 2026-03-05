@@ -8,13 +8,6 @@
 
 ![Architecture Overview](assets/architecture.png)
 
-📄 [Download PDF](assets/architecture.pdf)
-
-## TODO
-
-- [ ] Release real-world deployment code
-- [ ] Release ROS2 support version
-
 ## Overview
 
 InfoNav is an intelligent navigation system for embodied agents in indoor environments, combining Vision-Language Models (VLM) and Large Language Models (LLM) for semantic-aware object navigation tasks. The system proposes a unified value framework that integrates semantic value and information gain for zero-shot navigation.
@@ -186,3 +179,8 @@ This project builds upon several excellent open-source projects:
 ## Contact
 
 For questions or issues, please open an issue on GitHub.
+
+## TODO
+
+- [ ] Release real-world deployment code
+- [ ] Release ROS2 support version
