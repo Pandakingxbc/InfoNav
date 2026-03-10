@@ -4,6 +4,12 @@
 
 > **Paper:** Coming soon
 
+## 🎥 Demo Video
+
+**[Watch the Demo Video](https://github.com/Pandakingxbc/InfoNav/releases/download/v1.0.0-demo/InfoNav.mp4)** - See InfoNav in action!
+
+[![Demo Video](https://img.shields.io/badge/Demo-Video-blue?style=for-the-badge&logo=youtube)](https://github.com/Pandakingxbc/InfoNav/releases/download/v1.0.0-demo/InfoNav.mp4)
+
 ## Architecture
 
 ![Architecture Overview](assets/architecture.png)
