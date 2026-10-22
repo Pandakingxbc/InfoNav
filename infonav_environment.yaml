@@ -1,4 +1,4 @@
-name: apexnav
+name: infonav
 channels:
   - aihabitat
   - conda-forge

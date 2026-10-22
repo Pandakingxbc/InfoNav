@@ -13,6 +13,18 @@
 
     <!-- VLM Validation -->
     <arg name="vlm_validation_enabled_" default="false"/>
+    <!-- NeurIPS 2026 release defaults: full InfoNav WTRP policy. -->
+    <arg name="exploration_policy_" default="4"/>
+    <arg name="use_multi_source_" default="true"/>
+    <arg name="fusion_alpha_" default="0.8"/>
+    <arg name="use_ig_fusion_" default="true"/>
+    <arg name="use_adaptive_alpha_" default="true"/>
+    <arg name="alpha_base_" default="0.8"/>
+    <arg name="tau_conf_" default="0.8"/>
+    <arg name="top_k_value_" default="8"/>
+    <arg name="wtrp_temperature_" default="0.3"/>
+    <arg name="wtrp_hysteresis_ratio_" default="0.8"/>
+    <arg name="wtrp_max_brute_force_" default="8"/>
 
     <!-- main node -->
     <node pkg="exploration_manager" name="exploration_node" type="exploration_node" output="screen">
@@ -56,22 +68,23 @@
 
         <!-- Exploration manager -->
         <!-- 0: distance 1: value(greedy) 2: value(TSP top-k) 3: distance(TSP all) 4: WTRP(top-k) -->
-        <param name="exploration/policy" value="0" type="int"/>
-        <param name="exploration/top_k_value" value="20" type="int"/>
+        <param name="exploration/policy" value="$(arg exploration_policy_)" type="int"/>
+        <param name="exploration/top_k_value" value="$(arg top_k_value_)" type="int"/>
         <param name="exploration/tsp_dir" value="$(find lkh_mtsp_solver)/resource" type="string"/>
+        <param name="value_map/use_multi_source" value="$(arg use_multi_source_)" type="bool"/>
         <!-- Dual-Value Fusion: V_total = alpha * V_sem + (1-alpha) * V_ig -->
-        <param name="exploration/fusion_alpha" value="0" type="double"/>
-        <param name="exploration/use_ig_fusion" value="true" type="bool"/>
+        <param name="exploration/fusion_alpha" value="$(arg fusion_alpha_)" type="double"/>
+        <param name="exploration/use_ig_fusion" value="$(arg use_ig_fusion_)" type="bool"/>
         <!-- Adaptive Alpha: alpha(t) = alpha_base + (1-alpha_base) * max_fi(V_HSVM(fi)) / tau_conf -->
         <!-- When strong semantic cues detected at frontiers, favor exploitation; otherwise explore -->
-        <param name="exploration/use_adaptive_alpha" value="false" type="bool"/>
-        <param name="exploration/alpha_base" value="1" type="double"/>
-        <param name="exploration/tau_conf" value="0.8" type="double"/>
+        <param name="exploration/use_adaptive_alpha" value="$(arg use_adaptive_alpha_)" type="bool"/>
+        <param name="exploration/alpha_base" value="$(arg alpha_base_)" type="double"/>
+        <param name="exploration/tau_conf" value="$(arg tau_conf_)" type="double"/>
         <!-- WTRP: Weighted Traveling Repairman Problem (min weighted arrival time) -->
-        <param name="exploration/wtrp_temperature" value="0.3" type="double"/>
+        <param name="exploration/wtrp_temperature" value="$(arg wtrp_temperature_)" type="double"/>
         <!-- WTRP target hysteresis: only switch target if new cost is better by this ratio -->
-        <param name="exploration/wtrp_hysteresis_ratio" value="0.8" type="double"/>
-        <param name="exploration/wtrp_max_brute_force" value="10" type="int"/>
+        <param name="exploration/wtrp_hysteresis_ratio" value="$(arg wtrp_hysteresis_ratio_)" type="double"/>
+        <param name="exploration/wtrp_max_brute_force" value="$(arg wtrp_max_brute_force_)" type="int"/>
 
         <param name="frontier/cluster_min" value="2" type="int"/>
         <param name="frontier/cluster_size_xy" value="0.65" type="double"/>

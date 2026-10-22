@@ -8,8 +8,6 @@ multiple semantic hypotheses using LLM reasoning.
 Service: /semantic_expansion
 Request: target_object (string)
 Response: prompts (string[]), weights (float64[])
-
-Author: Zager-Zhang
 """
 
 import rospy

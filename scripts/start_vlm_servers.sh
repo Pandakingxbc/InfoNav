@@ -1,8 +1,7 @@
 #!/bin/bash
 
-# ApexNav VLM Servers Manager using tmux
 # Usage: ./start_vlm_servers.sh [start|stop|restart|status] [env_name]
-# Example: ./start_vlm_servers.sh start infonav
+# Example: ./start_vlm_servers.sh restart infonav
 
 #运行查看脚本的用户必须确保已安装tmux并且已创建所需的conda环境。
 #运行

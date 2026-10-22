@@ -1,5 +1,5 @@
 """
-D-FINE Object Detector Module for ApexNav.
+D-FINE object detector module for InfoNav.
 Replaces YOLOv7 with the state-of-the-art D-FINE detector.
 
 D-FINE: Redefine Regression Task of DETRs as Fine-grained Distribution Refinement
@@ -42,7 +42,7 @@ def _import_dfine():
 
 class DFine(nn.Module):
     """
-    D-FINE object detector wrapper compatible with ApexNav's detection interface.
+    D-FINE object detector wrapper compatible with InfoNav's detection interface.
 
     D-FINE is a powerful real-time object detector based on DETR architecture
     with fine-grained distribution refinement for improved accuracy.
@@ -54,6 +54,7 @@ class DFine(nn.Module):
         checkpoint_path: str,
         device: Optional[str] = None,
         image_size: int = 640,
+        num_top_queries: int = 15,
     ):
         """
         Initialize D-FINE detector.
@@ -63,6 +64,8 @@ class DFine(nn.Module):
             checkpoint_path: Path to D-FINE checkpoint file
             device: Device to run inference on ('cuda' or 'cpu')
             image_size: Input image size for the model
+            num_top_queries: Number of highest-scoring detections retained by
+                the D-FINE postprocessor. InfoNav uses 15.
         """
         super().__init__()
 
@@ -72,6 +75,7 @@ class DFine(nn.Module):
             self.device = torch.device(device)
 
         self.image_size = image_size
+        self.num_top_queries = num_top_queries
         self._load_model(config_path, checkpoint_path)
         self.model.eval()
 
@@ -90,6 +94,12 @@ class DFine(nn.Module):
         sys.path.insert(0, DFINE_PATH)
         try:
             cfg = _YAMLConfig(config_path)
+
+            # Keep the InfoNav inference setting outside the third-party
+            # submodule so a fresh clone reproduces the published behavior.
+            cfg.yaml_cfg["DFINEPostProcessor"]["num_top_queries"] = (
+                self.num_top_queries
+            )
 
             # Handle special cases in config
             if "HGNetv2" in cfg.yaml_cfg:
@@ -266,6 +276,12 @@ if __name__ == "__main__":
         default="pretrained_weights/dfine_x_coco.pth",
         help="Path to D-FINE checkpoint file"
     )
+    parser.add_argument(
+        "--num-top-queries",
+        type=int,
+        default=15,
+        help="Number of D-FINE postprocessor queries retained (default: 15)",
+    )
     args = parser.parse_args()
 
     print("Loading D-FINE model...")
@@ -281,7 +297,11 @@ if __name__ == "__main__":
             conf_thres = payload.get("conf_thres", 0.4)
             return self.predict(image, conf_thres=conf_thres).to_json()
 
-    dfine = DFineServer(args.config, args.checkpoint)
+    dfine = DFineServer(
+        args.config,
+        args.checkpoint,
+        num_top_queries=args.num_top_queries,
+    )
     print("D-FINE loaded!")
     print(f"Hosting on port {args.port}...")
     host_model(dfine, name="dfine", port=args.port)

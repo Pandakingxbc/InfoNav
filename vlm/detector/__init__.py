@@ -1,5 +1,5 @@
 """
-Object Detection Module for ApexNav.
+Object detection module for InfoNav.
 
 Provides multiple detector backends:
 - YOLOv7: Fast real-time detection (original)

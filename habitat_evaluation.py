@@ -19,8 +19,6 @@ Usage:
 
     # Test specific episode
     python habitat_evaluation.py --dataset hm3dv2 test_epi_num=10
-
-Author: Zhi Yang -modified from ApexNav 
 """
 
 # Standard library imports
@@ -33,11 +31,13 @@ import signal
 import subprocess
 import time
 from copy import deepcopy
+from pathlib import Path
 
 # Third-party library imports
 from hydra import initialize, compose
 import numpy as np
 import rospy
+import yaml
 from geometry_msgs.msg import PoseStamped
 from omegaconf import DictConfig
 from prettytable import PrettyTable
@@ -77,7 +77,30 @@ from llm.answer_reader.answer_reader import read_answer
 from params import HABITAT_STATE, ROS_STATE, ACTION, RESULT_TYPES
 from vlm.Labels import MP3D_ID_TO_NAME
 from vlm.utils.get_object_utils import get_object
-from pathlib import Path
+
+# Real-time analysis imports (for autonomous hypothesis generation)
+try:
+    import cv2
+    from scripts.vlm_environment_analyzer import VLMEnvironmentAnalyzer
+    from scripts.llm_hypothesis_analyzer import LLMHypothesisAnalyzer, AnalysisReportWriter
+    REALTIME_ANALYSIS_AVAILABLE = True
+except ImportError as e:
+    print(f"[Warning] Real-time analysis modules not available: {e}")
+    REALTIME_ANALYSIS_AVAILABLE = False
+
+# ============================================================
+# Configuration Loading
+# ============================================================
+# Load unified configuration from config/default.yaml
+# If file does not exist, use hardcoded defaults (backward compatible)
+CONFIG_PATH = Path(__file__).parent / "config" / "default.yaml"
+if CONFIG_PATH.exists():
+    with open(CONFIG_PATH, encoding='utf-8') as f:
+        CONFIG = yaml.safe_load(f)
+    print(f"[Config] Loaded configuration from {CONFIG_PATH}")
+else:
+    CONFIG = {}
+    print(f"[Config] Configuration file not found at {CONFIG_PATH}, using hardcoded defaults")
 
 # VLM (BLIP2) imports - will be loaded conditionally based on --disable-vlm flag
 # These are set in main() after parsing arguments
@@ -92,8 +115,8 @@ msg_observations = None
 global_action = None
 ros_state = None
 # NOTE: fusion_threshold 已移除，现在在 src/exploration_manager 中配置
-# 使用固定的默认检测置信度阈值
-DEFAULT_DETECTION_CONFIDENCE = 0.5
+# 使用固定的默认检测置信度阈值 (从配置文件读取，回退到 0.5)
+DEFAULT_DETECTION_CONFIDENCE = CONFIG.get('object', {}).get('default_detection_confidence', 0.5)
 ros_pub = None
 trigger_pub = None
 obj_point_cloud_pub = None
@@ -129,19 +152,22 @@ def publish_float32_array(publisher, data_list):
     publisher.publish(msg)
 
 
-def load_llm_hypotheses(env_base_dir, dataset, episode_id):
+def load_llm_hypotheses(env_base_dir, dataset, episode_id, max_hierarchy_level=4):
     """
-    加载LLM假说分析结果
+    加载LLM假说分析结果，支持层级过滤
 
     Args:
-        env_base_dir: 环境数据根目录 (如 "env")
+        env_base_dir: 环境数据根目录 (如 "env")，可从配置文件读取
         dataset: 数据集名称 (如 "hm3dv2")
         episode_id: Episode ID
+        max_hierarchy_level: 最大层级 (1-4)，从 Hydra 配置传入
 
     Returns:
-        List[dict]: 假说列表，如果文件不存在则返回空列表
+        List[dict]: 假说列表（已按层级过滤），如果文件不存在则返回空列表
     """
-    hypothesis_file = Path(env_base_dir) / f"env_{dataset}" / f"task{episode_id}" / "llm_hypothesis_analysis.json"
+    # Get hypothesis file name from config (with fallback)
+    hypothesis_filename = CONFIG.get('paths', {}).get('llm', {}).get('hypothesis_file', 'llm_hypothesis_analysis.json')
+    hypothesis_file = Path(env_base_dir) / f"env_{dataset}" / f"task{episode_id}" / hypothesis_filename
 
     if hypothesis_file.exists():
         try:
@@ -149,8 +175,41 @@ def load_llm_hypotheses(env_base_dir, dataset, episode_id):
                 data = json.load(f)
 
             hypotheses = data.get('semantic_hypotheses', [])
-            print(f"[LLM Hypothesis] Loaded {len(hypotheses)} hypotheses from {hypothesis_file}")
-            return hypotheses
+
+            # 使用传入的层级过滤参数
+            max_level = max_hierarchy_level
+
+            # 定义层级映射（根据消融实验需求修正）
+            # L1: 仅目标物体
+            # L2: 目标物体 + 房间类型
+            # L3: 目标物体 + 房间类型 + 共现物体
+            # L4: 目标物体 + 房间类型 + 共现物体 + 物体部件 (Full)
+            level_map = {
+                "target_object": 1,      # Level 1: 核心目标
+                "room_type": 2,          # Level 2: 空间上下文
+                "co_occurrence": 3,      # Level 3: 共现物体线索
+                "object_part": 4         # Level 4: 细粒度部件
+            }
+
+            # 过滤假设：只保留 level <= max_level 的假设
+            filtered_hypotheses = [
+                h for h in hypotheses
+                if level_map.get(h.get('hypothesis_type', 'unknown'), 999) <= max_level
+            ]
+
+            # 打印过滤信息
+            if len(filtered_hypotheses) < len(hypotheses):
+                print(f"[LLM Hypothesis] Hierarchy filtering: {len(hypotheses)} → {len(filtered_hypotheses)} "
+                      f"hypotheses (max_level={max_level})")
+                # 显示被过滤掉的类型
+                filtered_types = set(h.get('hypothesis_type') for h in hypotheses) - \
+                                set(h.get('hypothesis_type') for h in filtered_hypotheses)
+                if filtered_types:
+                    print(f"[LLM Hypothesis] Filtered out types: {', '.join(filtered_types)}")
+            else:
+                print(f"[LLM Hypothesis] Loaded {len(hypotheses)} hypotheses from {hypothesis_file} (max_level={max_level}, no filtering)")
+
+            return filtered_hypotheses
 
         except Exception as e:
             print(f"[LLM Hypothesis] Failed to load {hypothesis_file}: {e}")
@@ -158,6 +217,368 @@ def load_llm_hypotheses(env_base_dir, dataset, episode_id):
     else:
         print(f"[LLM Hypothesis] File not found: {hypothesis_file}, using fallback")
         return []
+
+
+# ============================================================
+# Real-time Panorama Collection and Hypothesis Generation
+# ============================================================
+# These functions enable autonomous hypothesis generation at the start
+# of each episode, replacing pre-computed hypotheses with real-time analysis.
+
+# Configuration constants for panorama collection
+TURN_ANGLE = 30  # Turn angle per action (degrees)
+TURNS_PER_90_DEG = 3  # Number of turns needed for 90 degrees (90/30=3)
+VIEW_DIRECTIONS = {0: "front", 1: "left", 2: "back", 3: "right"}
+
+
+def collect_panorama_views_realtime(env, observations) -> list:
+    """
+    Collect 4 panorama views by rotating the agent in place.
+
+    This function rotates the agent 90° three times to capture views at:
+    - View 0: Front (0°)
+    - View 1: Left (90°)
+    - View 2: Back (180°)
+    - View 3: Right (270°)
+
+    Args:
+        env: Habitat environment
+        observations: Current observations dict
+
+    Returns:
+        List of 4 RGB images (numpy arrays)
+    """
+    views = []
+
+    # Capture front view (current position)
+    rgb_image = observations["rgb"].copy()
+    views.append(rgb_image)
+    print(f"  [Panorama] Captured view 0 (front)")
+
+    # Rotate and capture remaining 3 views
+    for view_idx in range(1, 4):
+        # Rotate left 90 degrees (3 turns × 30°)
+        for _ in range(TURNS_PER_90_DEG):
+            observations = env.step(HabitatSimActions.turn_left)
+
+        rgb_image = observations["rgb"].copy()
+        views.append(rgb_image)
+        direction = VIEW_DIRECTIONS[view_idx]
+        print(f"  [Panorama] Captured view {view_idx} ({direction})")
+
+    # Rotate back to original orientation (one more 90° turn)
+    for _ in range(TURNS_PER_90_DEG):
+        observations = env.step(HabitatSimActions.turn_left)
+
+    return views
+
+
+def save_panorama_views(views: list, output_dir: Path, task_info: dict) -> bool:
+    """
+    Save panorama views and task info to disk.
+
+    Args:
+        views: List of 4 RGB images
+        output_dir: Directory to save views
+        task_info: Dictionary containing task_index, episode_id, target_object, scene_id
+
+    Returns:
+        True if successful
+    """
+    if not REALTIME_ANALYSIS_AVAILABLE:
+        print("[Error] cv2 not available for saving images")
+        return False
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Save each view as PNG
+    for i, rgb_image in enumerate(views):
+        view_path = output_dir / f"view{i}.png"
+        # Convert RGB to BGR for OpenCV
+        bgr_image = cv2.cvtColor(rgb_image, cv2.COLOR_RGB2BGR)
+        cv2.imwrite(str(view_path), bgr_image)
+
+    # Save task_info.txt
+    info_path = output_dir / "task_info.txt"
+    with open(info_path, 'w', encoding='utf-8') as f:
+        f.write(f"Task Index: {task_info.get('task_index', 'N/A')}\n")
+        f.write(f"Episode ID: {task_info.get('episode_id', 'N/A')}\n")
+        f.write(f"Target Object: {task_info.get('target_object', 'unknown')}\n")
+        f.write(f"Scene ID: {task_info.get('scene_id', 'N/A')}\n")
+
+    print(f"  [Panorama] Saved 4 views and task_info to {output_dir}")
+    return True
+
+
+def run_realtime_vlm_analysis(task_dir: Path, target_object: str,
+                               vlm_config: dict) -> tuple:
+    """
+    Run VLM environment analysis on collected panorama views.
+
+    Args:
+        task_dir: Directory containing view*.png files
+        target_object: Target object name
+        vlm_config: VLM configuration dict with api_url, model, api_type, timeout
+
+    Returns:
+        (success, vlm_content, error_msg)
+    """
+    if not REALTIME_ANALYSIS_AVAILABLE:
+        return False, None, "VLMEnvironmentAnalyzer not available"
+
+    try:
+        analyzer = VLMEnvironmentAnalyzer(
+            api_url=vlm_config.get('api_url', 'http://localhost:20004/api/chat'),
+            model=vlm_config.get('model', 'qwen3-vl:32b'),
+            env_base_dir=str(task_dir.parent.parent),  # env directory
+            timeout=vlm_config.get('timeout', 300),
+            api_type=vlm_config.get('api_type', 'ollama')
+        )
+
+        # Extract env_name and task_num from task_dir path
+        # task_dir format: env/env_{dataset}/task{num}
+        env_name = task_dir.parent.name.replace('env_', '')
+        task_num = int(task_dir.name.replace('task', ''))
+
+        success, content, duration, error_msg = analyzer.analyze_single(
+            env_name, task_num,
+            temperature=vlm_config.get('temperature', 0.2)
+        )
+
+        if success:
+            print(f"  [VLM] Analysis completed in {duration:.2f}s")
+            return True, content, None
+        else:
+            return False, None, error_msg
+
+    except Exception as e:
+        return False, None, str(e)
+
+
+def run_realtime_llm_hypothesis(task_dir: Path, target_object: str,
+                                 llm_config: dict, generate_ig: bool = True) -> tuple:
+    """
+    Run LLM hypothesis generation (HSVM + IG) based on VLM analysis.
+
+    Args:
+        task_dir: Directory containing vlm_analysis.txt
+        target_object: Target object name
+        llm_config: LLM configuration dict with api_url, model, temperature
+        generate_ig: Whether to generate IG hypotheses
+
+    Returns:
+        (success, hypotheses_list, ig_prompts_list, error_msg)
+    """
+    if not REALTIME_ANALYSIS_AVAILABLE:
+        return False, [], [], "LLMHypothesisAnalyzer not available"
+
+    try:
+        analyzer = LLMHypothesisAnalyzer(
+            api_url=llm_config.get('api_url', 'https://api.deepseek.com/chat/completions'),
+            model=llm_config.get('model', 'deepseek-chat'),
+            env_base_dir=str(task_dir.parent.parent)
+        )
+
+        # Extract env_name and task_num from task_dir path
+        env_name = task_dir.parent.name.replace('env_', '')
+        task_num = int(task_dir.name.replace('task', ''))
+
+        # Run analysis with IG generation
+        if generate_ig:
+            success, analysis, error_msg = analyzer.analyze_single_with_ig(
+                env_name, task_num,
+                temperature=llm_config.get('temperature', 0.3),
+                generate_ig=True
+            )
+        else:
+            success, analysis, error_msg = analyzer.analyze_single(
+                env_name, task_num,
+                temperature=llm_config.get('temperature', 0.3)
+            )
+
+        if success and analysis:
+            # Save JSON result
+            writer = AnalysisReportWriter()
+            json_file = task_dir / "llm_hypothesis_analysis.json"
+            writer.write_json(json_file, analysis)
+            print(f"  [LLM] Hypotheses saved to {json_file}")
+
+            # Extract hypotheses for return
+            hypotheses = [h.to_habitat_dict() for h in analysis.semantic_hypotheses]
+
+            # Extract IG prompts
+            ig_prompts = []
+            if analysis.ig_hypotheses:
+                ig_prompts = [h.prompt for h in analysis.ig_hypotheses if h.prompt]
+
+            print(f"  [LLM] Generated {len(hypotheses)} HSVM hypotheses, {len(ig_prompts)} IG prompts")
+            return True, hypotheses, ig_prompts, None
+        else:
+            return False, [], [], error_msg
+
+    except Exception as e:
+        return False, [], [], str(e)
+
+
+def generate_hypotheses_realtime(env, observations, dataset: str, task_index: int,
+                                  target_object: str, episode_id: str, scene_id: str,
+                                  env_base_dir: str, vlm_config: dict, llm_config: dict,
+                                  skip_existing: bool = True) -> tuple:
+    """
+    Complete real-time hypothesis generation pipeline:
+    1. Collect 4 panorama views by rotating the agent
+    2. Run VLM environment analysis
+    3. Generate HSVM + IG hypotheses
+
+    Args:
+        env: Habitat environment
+        observations: Current observations
+        dataset: Dataset name (hm3dv2, mp3d, etc.)
+        task_index: Task index number
+        target_object: Target object name
+        episode_id: Episode ID
+        scene_id: Scene ID
+        env_base_dir: Base directory for env data
+        vlm_config: VLM configuration dict
+        llm_config: LLM configuration dict
+        skip_existing: Skip if hypotheses already exist
+
+    Returns:
+        (observations, hypotheses_list, ig_prompts_list, success)
+        - observations: Updated observations after rotation
+        - hypotheses_list: List of HSVM hypothesis dicts
+        - ig_prompts_list: List of IG prompt strings
+        - success: Whether generation was successful
+    """
+    task_dir = Path(env_base_dir) / f"env_{dataset}" / f"task{task_index}"
+    json_file = task_dir / "llm_hypothesis_analysis.json"
+
+    # Check if hypotheses already exist
+    if skip_existing and json_file.exists():
+        print(f"[Real-time Hypothesis] Existing hypotheses found at {json_file}, loading...")
+        # Load existing hypotheses
+        hypotheses = load_llm_hypotheses(env_base_dir, dataset, task_index, max_hierarchy_level=4)
+        ig_prompts = load_ig_hypotheses(env_base_dir, dataset, task_index)
+        return observations, hypotheses, ig_prompts, True
+
+    print(f"\n{'='*60}")
+    print(f"[Real-time Hypothesis Generation] Task {task_index}")
+    print(f"{'='*60}")
+    print(f"Target: {target_object}")
+    print(f"Scene: {scene_id}")
+
+    # Default fallback values
+    DEFAULT_IG_PROMPTS = [
+        "This view shows a corridor or hallway leading to other areas",
+        "There is a doorway or opening that leads to another room",
+        "This passage connects to multiple rooms or spaces"
+    ]
+
+    if not REALTIME_ANALYSIS_AVAILABLE:
+        print("[Warning] Real-time analysis not available, using defaults")
+        return observations, [], DEFAULT_IG_PROMPTS, False
+
+    # Step 1: Collect panorama views
+    print(f"\n[Step 1/3] Collecting panorama views...")
+    views = collect_panorama_views_realtime(env, observations)
+
+    # Save views
+    task_info = {
+        'task_index': task_index,
+        'episode_id': episode_id,
+        'target_object': target_object,
+        'scene_id': scene_id
+    }
+    save_panorama_views(views, task_dir, task_info)
+
+    # Step 2: Run VLM analysis
+    print(f"\n[Step 2/3] Running VLM environment analysis...")
+    vlm_success, vlm_content, vlm_error = run_realtime_vlm_analysis(
+        task_dir, target_object, vlm_config
+    )
+
+    if not vlm_success:
+        print(f"[Warning] VLM analysis failed: {vlm_error}")
+        print("[Warning] Using default IG prompts")
+        return observations, [], DEFAULT_IG_PROMPTS, False
+
+    # Step 3: Generate hypotheses
+    print(f"\n[Step 3/3] Generating HSVM + IG hypotheses...")
+    llm_success, hypotheses, ig_prompts, llm_error = run_realtime_llm_hypothesis(
+        task_dir, target_object, llm_config, generate_ig=True
+    )
+
+    if not llm_success:
+        print(f"[Warning] LLM hypothesis generation failed: {llm_error}")
+        print("[Warning] Using default IG prompts")
+        return observations, [], DEFAULT_IG_PROMPTS, False
+
+    # Use default IG prompts if none were generated
+    if not ig_prompts:
+        print("[Warning] No IG prompts generated, using defaults")
+        ig_prompts = DEFAULT_IG_PROMPTS
+
+    print(f"\n{'='*60}")
+    print(f"[Real-time Hypothesis] Complete!")
+    print(f"  HSVM Hypotheses: {len(hypotheses)}")
+    print(f"  IG Prompts: {len(ig_prompts)}")
+    print(f"{'='*60}\n")
+
+    return observations, hypotheses, ig_prompts, True
+
+
+def load_ig_hypotheses(env_base_dir, dataset, episode_id):
+    """
+    加载LLM生成的IG假设（Information Gain假设）
+
+    IG假设是目标无关的，用于估计视图的探索潜力。
+    与HSVM假设不同，IG假设描述空间连通性结构（走廊、门洞、通道等）。
+
+    Args:
+        env_base_dir: 环境数据根目录 (如 "env")
+        dataset: 数据集名称 (如 "hm3dv2")
+        episode_id: Episode ID
+
+    Returns:
+        List[str]: IG prompts列表，如果文件不存在则返回默认prompts
+    """
+    # 默认的IG prompts（固定版本，作为fallback）
+    DEFAULT_IG_PROMPTS = [
+        "This view shows a corridor or hallway leading to other areas",
+        "There is a doorway or opening that leads to another room",
+        "This passage connects to multiple rooms or spaces"
+    ]
+
+    # Get hypothesis file name from config (with fallback)
+    hypothesis_filename = CONFIG.get('paths', {}).get('llm', {}).get('hypothesis_file', 'llm_hypothesis_analysis.json')
+    hypothesis_file = Path(env_base_dir) / f"env_{dataset}" / f"task{episode_id}" / hypothesis_filename
+
+    if hypothesis_file.exists():
+        try:
+            with open(hypothesis_file, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+
+            ig_hypotheses = data.get('ig_hypotheses', [])
+
+            if ig_hypotheses:
+                # 从IG假设中提取prompts
+                ig_prompts = [h.get('prompt', '') for h in ig_hypotheses if h.get('prompt')]
+                if ig_prompts:
+                    print(f"[IG Hypothesis] Loaded {len(ig_prompts)} dynamic IG prompts from {hypothesis_file}")
+                    return ig_prompts
+                else:
+                    print(f"[IG Hypothesis] No valid prompts in ig_hypotheses, using default")
+                    return DEFAULT_IG_PROMPTS
+            else:
+                print(f"[IG Hypothesis] No ig_hypotheses found in {hypothesis_file}, using default")
+                return DEFAULT_IG_PROMPTS
+
+        except Exception as e:
+            print(f"[IG Hypothesis] Failed to load {hypothesis_file}: {e}, using default")
+            return DEFAULT_IG_PROMPTS
+    else:
+        print(f"[IG Hypothesis] File not found: {hypothesis_file}, using default")
+        return DEFAULT_IG_PROMPTS
 
 
 def signal_handler(sig, frame):
@@ -218,7 +639,9 @@ def _write_evaluation_stats(episode_stats_list, video_output_path):
         video_output_path: Path to video output directory (used to determine debug path)
     """
     # Create debug directory if it doesn't exist
-    debug_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "debug")
+    # Keep each arm's summaries inside its own output directory.  A global
+    # debug directory mixes concurrently or sequentially evaluated protocols.
+    debug_dir = os.path.join(video_output_path, "debug")
     os.makedirs(debug_dir, exist_ok=True)
 
     # Generate timestamp for filename
@@ -277,7 +700,43 @@ def _write_evaluation_stats(episode_stats_list, video_output_path):
         f.write("=" * 80 + "\n")
 
     print(f"[Stats] Evaluation statistics written to: {stats_file}")
+
+    # Also save JSON format for per-category analysis
+    json_file = os.path.join(debug_dir, f"evaluation_stats_{timestamp}.json")
+    with open(json_file, 'w', encoding='utf-8') as f:
+        json.dump(episode_stats_list, f, indent=2, ensure_ascii=False)
+    print(f"[Stats] JSON data written to: {json_file}")
+
     return stats_file
+
+
+def _append_episode_metrics(video_output_path, episode_stats):
+    """Persist one comparison-ready row, rejecting conflicting duplicates."""
+    metrics_path = os.path.join(video_output_path, "episode_metrics.jsonl")
+    episode_key = (
+        str(episode_stats["scene_id"]),
+        str(episode_stats["episode_id"]),
+    )
+    if os.path.exists(metrics_path):
+        with open(metrics_path, "r", encoding="utf-8") as stream:
+            for line in stream:
+                if not line.strip():
+                    continue
+                existing = json.loads(line)
+                existing_key = (
+                    str(existing["scene_id"]),
+                    str(existing["episode_id"]),
+                )
+                if existing_key == episode_key:
+                    if int(existing["episode_num"]) != int(episode_stats["episode_num"]):
+                        raise RuntimeError(
+                            f"episode key {episode_key} has conflicting sequence numbers"
+                        )
+                    return
+    with open(metrics_path, "a", encoding="utf-8") as stream:
+        stream.write(json.dumps(episode_stats, ensure_ascii=False) + "\n")
+        stream.flush()
+        os.fsync(stream.fileno())
 
 
 def _parse_dataset_arg():
@@ -308,29 +767,121 @@ def _parse_dataset_arg():
              "When enabled, skips semantic scoring and IG estimation. "
              "Use this with exploration/policy=0 (distance greedy) for pure frontier exploration baseline.",
     )
+    # Real-time hypothesis generation options
+    parser.add_argument(
+        "--realtime-hypothesis",
+        action="store_true",
+        default=False,
+        help="Enable real-time hypothesis generation. At the start of each episode, "
+             "the agent will: (1) collect 4 panorama views by rotating, "
+             "(2) run VLM environment analysis, (3) generate HSVM+IG hypotheses. "
+             "This replaces loading pre-computed hypotheses from disk.",
+    )
+    parser.add_argument(
+        "--vlm-api-url",
+        type=str,
+        default="https://dashscope.aliyuncs.com/compatible-mode/v1",
+        help="VLM API URL for real-time analysis (default: DashScope API)",
+    )
+    parser.add_argument(
+        "--vlm-model",
+        type=str,
+        default="qwen-vl-max",
+        help="VLM model name (default: qwen-vl-max for DashScope)",
+    )
+    parser.add_argument(
+        "--vlm-api-type",
+        type=str,
+        choices=["ollama", "dashscope"],
+        default="dashscope",
+        help="VLM API type: ollama (local) or dashscope (Alibaba Cloud, default)",
+    )
+    parser.add_argument(
+        "--llm-api-url",
+        type=str,
+        default="https://api.deepseek.com/chat/completions",
+        help="LLM API URL for hypothesis generation (default: DeepSeek API)",
+    )
+    parser.add_argument(
+        "--llm-model",
+        type=str,
+        default="deepseek-chat",
+        help="LLM model name (default: deepseek-chat)",
+    )
+    parser.add_argument(
+        "--skip-existing-hypothesis",
+        action="store_true",
+        default=True,
+        help="Skip hypothesis generation if JSON file already exists (default: True)",
+    )
+    parser.add_argument(
+        "--force-regenerate",
+        action="store_true",
+        default=False,
+        help="Force regenerate hypotheses even if they exist",
+    )
+    parser.add_argument(
+        "--control-rate-hz",
+        type=float,
+        default=10.0,
+        help="Habitat action/control loop frequency (default: 10 Hz)",
+    )
+    parser.add_argument(
+        "--max-episodes-per-process",
+        type=int,
+        default=-1,
+        help="Exit cleanly after this many episodes; -1 runs all remaining episodes",
+    )
     # Keep unknown so users can still pass Hydra-style overrides (e.g., key=value)
     args, unknown = parser.parse_known_args()
-    return args.dataset, args.detector_mode, args.disable_vlm, unknown
+
+    # Build config dicts for real-time analysis
+    vlm_config = {
+        'api_url': args.vlm_api_url,
+        'model': args.vlm_model,
+        'api_type': args.vlm_api_type,
+        'timeout': 300,
+        'temperature': 0.2
+    }
+    llm_config = {
+        'api_url': args.llm_api_url,
+        'model': args.llm_model,
+        'temperature': 0.3
+    }
+
+    return (args.dataset, args.detector_mode, args.disable_vlm,
+            args.realtime_hypothesis, vlm_config, llm_config,
+            not args.force_regenerate, args.control_rate_hz,
+            args.max_episodes_per_process, unknown)
 
 
-def main(cfg: DictConfig, dataset: str = "hm3dv2", disable_vlm: bool = False) -> None:
+def main(cfg: DictConfig, dataset: str = "hm3dv2", disable_vlm: bool = False,
+         realtime_hypothesis: bool = False, vlm_config: dict = None,
+         llm_config: dict = None, skip_existing: bool = True,
+         control_rate_hz: float = 10.0,
+         max_episodes_per_process: int = -1) -> None:
     global msg_observations, global_action, ros_state
     global ros_pub, trigger_pub, obj_point_cloud_pub, confidence_threshold_pub
     global final_state, expl_result
     global vlm_verify_count_this_episode
-    global get_multi_source_cosine_with_ig, VLM_DISABLED
+    global get_multi_source_cosine_with_ig, get_multi_source_cosine_with_dynamic_ig, VLM_DISABLED
 
     # Set VLM disabled flag
     VLM_DISABLED = disable_vlm
 
     # Conditionally import VLM module
     if not disable_vlm:
-        from vlm.utils.get_itm_message import get_multi_source_cosine_with_ig as _get_multi_source_cosine_with_ig
+        from vlm.utils.get_itm_message import (
+            get_multi_source_cosine_with_ig as _get_multi_source_cosine_with_ig,
+            get_multi_source_cosine_with_dynamic_ig as _get_multi_source_cosine_with_dynamic_ig
+        )
         get_multi_source_cosine_with_ig = _get_multi_source_cosine_with_ig
-        print("[VLM] BLIP2 ITM client initialized")
+        get_multi_source_cosine_with_dynamic_ig = _get_multi_source_cosine_with_dynamic_ig
+        print("[VLM] BLIP2 ITM client initialized (with dynamic IG support)")
     else:
         print("[VLM] DISABLED - Skipping BLIP2 initialization (ablation mode)")
         get_multi_source_cosine_with_ig = None
+        get_multi_source_cosine_with_dynamic_ig = None
 
     # Load MP3D validation data for object category mapping
     with gzip.open(
@@ -425,6 +976,23 @@ def main(cfg: DictConfig, dataset: str = "hm3dv2", disable_vlm: bool = False) ->
     llm_client = llm_cfg.llm_client
     llm_answer_path = llm_cfg.llm_answer_path
     llm_response_path = llm_cfg.llm_response_path
+    # Hierarchical hypothesis level for ablation study (1-4)
+    max_hierarchy_level = llm_cfg.get('max_hierarchy_level', 4)
+    print(f"[LLM Hypothesis] Using max_hierarchy_level={max_hierarchy_level}")
+
+    # ==================== Publish Exploration Parameters to ROS ====================
+    # Override ROS launch defaults with Hydra config values (for ablation study)
+    # NOTE: Parameters must be set in the exploration_node's private namespace
+    # because launch file defines them inside <node> tag
+    if hasattr(cfg, 'exploration'):
+        expl_cfg = cfg.exploration
+        if hasattr(expl_cfg, 'fusion_alpha'):
+            # Set in node's private namespace (where C++ reads from)
+            rospy.set_param('/exploration_node/exploration/fusion_alpha', float(expl_cfg.fusion_alpha))
+            print(f"[Exploration] fusion_alpha={expl_cfg.fusion_alpha} (V_total = α*V_sem + (1-α)*V_ig)")
+        if hasattr(expl_cfg, 'use_ig_fusion'):
+            rospy.set_param('/exploration_node/exploration/use_ig_fusion', bool(expl_cfg.use_ig_fusion))
+            print(f"[Exploration] use_ig_fusion={expl_cfg.use_ig_fusion}")
 
     # Single test parameters
     env_num_once = cfg.test_epi_num  # Which episode to test for single run (deprecated)
@@ -537,7 +1105,14 @@ def main(cfg: DictConfig, dataset: str = "hm3dv2", disable_vlm: bool = False) ->
     episode_stats_list = []
     stats_written = False  # Flag to track if stats have been written
 
-    for epi in range(number_of_episodes - num_total):
+    process_episode_count = number_of_episodes - num_total
+    if max_episodes_per_process > 0:
+        process_episode_count = min(process_episode_count, max_episodes_per_process)
+    print(
+        f"[Runtime] control_rate={control_rate_hz:g}Hz, "
+        f"episodes_this_process={process_episode_count}"
+    )
+    for epi in range(process_episode_count):
         # Publish progress information
         publish_int32_array(progress_pub, [num_total, number_of_episodes])
 
@@ -591,12 +1166,53 @@ def main(cfg: DictConfig, dataset: str = "hm3dv2", disable_vlm: bool = False) ->
             llm_answer_path, llm_response_path, label, llm_client
         )
 
-        # Load LLM semantic hypotheses for HSVM (Hierarchical Semantic Value Map)
+        # Load or generate LLM semantic hypotheses for HSVM (Hierarchical Semantic Value Map)
         # HSVM 已经包含了多层级假说: room_type, target_object, co_occurrence, part_attribute
         episode_id = env.current_episode.episode_id
+        scene_id = env.current_episode.scene_id
         task_index = num_total  # Use task index instead of episode_id for hypothesis loading
-        current_hypotheses = load_llm_hypotheses("env", dataset, task_index)
-        print(f"[Task {task_index}, Episode {episode_id}] Target: {label}, Hypotheses: {len(current_hypotheses)}")
+        # Get env_base_dir from config (with fallback to "env")
+        env_base_dir = CONFIG.get('paths', {}).get('llm', {}).get('env_base_dir', 'env')
+
+        # Real-time hypothesis generation mode
+        if realtime_hypothesis and REALTIME_ANALYSIS_AVAILABLE:
+            print(f"\n[Real-time Mode] Generating hypotheses for Task {task_index}...")
+            # Use generate_hypotheses_realtime which handles:
+            # 1. Panorama view collection (rotates agent)
+            # 2. VLM environment analysis
+            # 3. HSVM + IG hypothesis generation
+            observations, current_hypotheses, current_ig_prompts, gen_success = generate_hypotheses_realtime(
+                env=env,
+                observations=observations,
+                dataset=dataset,
+                task_index=task_index,
+                target_object=label,
+                episode_id=episode_id,
+                scene_id=scene_id,
+                env_base_dir=env_base_dir,
+                vlm_config=vlm_config or {},
+                llm_config=llm_config or {},
+                skip_existing=skip_existing
+            )
+
+            # Update msg_observations after rotation
+            observations["camera_pitch"] = camera_pitch
+            msg_observations = deepcopy(observations)
+            del observations["camera_pitch"]
+
+            if not gen_success:
+                print("[Warning] Real-time hypothesis generation failed, falling back to file-based loading")
+                current_hypotheses = load_llm_hypotheses(env_base_dir, dataset, task_index, max_hierarchy_level)
+                current_ig_prompts = load_ig_hypotheses(env_base_dir, dataset, task_index)
+        else:
+            # Load from pre-computed files (original behavior)
+            current_hypotheses = load_llm_hypotheses(env_base_dir, dataset, task_index, max_hierarchy_level)
+            # Load IG hypotheses (target-agnostic connectivity hypotheses)
+            # IG假设用于估计视图的探索潜力，描述走廊、门洞、通道等空间连通性结构
+            current_ig_prompts = load_ig_hypotheses(env_base_dir, dataset, task_index)
+
+        print(f"[Task {task_index}, Episode {episode_id}] Target: {label}, "
+              f"HSVM Hypotheses: {len(current_hypotheses)}, IG Prompts: {len(current_ig_prompts)}")
 
         # Initialize video frame collection
         vis_frames = []
@@ -636,7 +1252,7 @@ def main(cfg: DictConfig, dataset: str = "hm3dv2", disable_vlm: bool = False) ->
 
         odom_timer = rospy.Timer(rospy.Duration(0.2), publish_odom_and_confidence)
 
-        rate = rospy.Rate(10)
+        rate = rospy.Rate(control_rate_hz)
         while not rospy.is_shutdown() and not env.episode_over:
             # Skip episode if target is not on the same floor
             is_feasible = 0
@@ -699,12 +1315,12 @@ def main(cfg: DictConfig, dataset: str = "hm3dv2", disable_vlm: bool = False) ->
             t0 = time_module.time()
 
             if not VLM_DISABLED:
-                # Normal mode: run VLM inference
-                hypotheses_data, ig_data = get_multi_source_cosine_with_ig(
-                    observations["rgb"], label, current_hypotheses
+                # Normal mode: run VLM inference with dynamic IG hypotheses
+                hypotheses_data, ig_data = get_multi_source_cosine_with_dynamic_ig(
+                    observations["rgb"], label, current_hypotheses, current_ig_prompts
                 )
                 timing_breakdown['vlm_inference'] = time_module.time() - t0
-                timing_breakdown['vlm_num_prompts'] = len(hypotheses_data) + 3  # +3 for IG prompts
+                timing_breakdown['vlm_num_prompts'] = len(hypotheses_data) + len(current_ig_prompts)
 
                 # Build and publish SemanticScores message
                 t0 = time_module.time()
@@ -725,12 +1341,20 @@ def main(cfg: DictConfig, dataset: str = "hm3dv2", disable_vlm: bool = False) ->
                 semantic_scores_pub.publish(semantic_scores_msg)
 
                 # Build and publish IG score message
+                # NOTE: 支持动态IG prompts，向后兼容固定3个字段
                 ig_score_msg = IGScore()
                 ig_score_msg.header.stamp = rospy.Time.now()
                 ig_score_msg.ig_score = ig_data["ig_score"]
-                ig_score_msg.corridor_score = ig_data["corridor_score"]
-                ig_score_msg.doorway_score = ig_data["doorway_score"]
-                ig_score_msg.passage_score = ig_data["passage_score"]
+                # 向后兼容：如果使用动态prompts，用平均分填充固定字段
+                if ig_data.get("is_dynamic", False):
+                    ig_avg = ig_data["ig_score"]
+                    ig_score_msg.corridor_score = ig_avg
+                    ig_score_msg.doorway_score = ig_avg
+                    ig_score_msg.passage_score = ig_avg
+                else:
+                    ig_score_msg.corridor_score = ig_data.get("corridor_score", ig_data["ig_score"])
+                    ig_score_msg.doorway_score = ig_data.get("doorway_score", ig_data["ig_score"])
+                    ig_score_msg.passage_score = ig_data.get("passage_score", ig_data["ig_score"])
                 ig_score_pub.publish(ig_score_msg)
                 timing_breakdown['semantic_msg_build'] = time_module.time() - t0
 
@@ -739,10 +1363,18 @@ def main(cfg: DictConfig, dataset: str = "hm3dv2", disable_vlm: bool = False) ->
                     print(f"Multi-source semantic scores:")
                     for i, h in enumerate(hypotheses_data):
                         print(f"  [{i}] {h['type']:15s} | Score: {h['score']:.3f} | Weight: {h['weight']:.3f} | {h['prompt'][:50]}")
-                    print(f"Information Gain (IG) score: {ig_data['ig_score']:.3f} "
-                          f"[corridor: {ig_data['corridor_score']:.3f}, "
-                          f"doorway: {ig_data['doorway_score']:.3f}, "
-                          f"passage: {ig_data['passage_score']:.3f}]")
+                    # 动态IG信息
+                    is_dynamic = ig_data.get("is_dynamic", False)
+                    individual_scores = ig_data.get("individual_scores", [])
+                    if is_dynamic and individual_scores:
+                        scores_str = ", ".join(f"{s:.3f}" for s in individual_scores)
+                        print(f"Information Gain (IG) score: {ig_data['ig_score']:.3f} "
+                              f"[dynamic, {len(individual_scores)} prompts: {scores_str}]")
+                    else:
+                        print(f"Information Gain (IG) score: {ig_data['ig_score']:.3f} "
+                              f"[corridor: {ig_data.get('corridor_score', 0):.3f}, "
+                              f"doorway: {ig_data.get('doorway_score', 0):.3f}, "
+                              f"passage: {ig_data.get('passage_score', 0):.3f}]")
             else:
                 # Ablation mode: skip VLM inference entirely
                 timing_breakdown['vlm_inference'] = 0.0
@@ -972,15 +1604,20 @@ def main(cfg: DictConfig, dataset: str = "hm3dv2", disable_vlm: bool = False) ->
         episode_stats = {
             "episode_num": num_total,
             "episode_id": episode_id,
+            "scene_id": scene_id,
             "target": label,
+            "target_category": env.current_episode.object_category,
             "steps": count_steps,
             "time_seconds": episode_time,
             "vlm_calls": vlm_verify_count_this_episode,
             "success": success,
             "spl": spl,
+            "soft_spl": soft_spl,
+            "distance_to_goal": distance_to_goal,
             "result": result_text,
         }
         episode_stats_list.append(episode_stats)
+        _append_episode_metrics(video_output_path, episode_stats)
         print(f"[Stats] Episode {num_total}: steps={count_steps}, time={episode_time:.1f}s, vlm_calls={vlm_verify_count_this_episode}, success={success}")
 
         # Write stats at 100 episodes milestone (but don't stop the test)
@@ -1030,7 +1667,11 @@ if __name__ == "__main__":
     rospy.init_node("habitat_eval_node", anonymous=True)
 
     try:
-        dataset, detector_mode, disable_vlm, overrides = _parse_dataset_arg()
+        (dataset, detector_mode, disable_vlm,
+         realtime_hypothesis, vlm_config, llm_config,
+         skip_existing, control_rate_hz,
+         max_episodes_per_process, overrides) = _parse_dataset_arg()
+
         cfg_name = f"habitat_eval_{dataset}"
         # Compose the chosen config and pass through extra Hydra overrides
         with initialize(version_base=None, config_path="config"):
@@ -1049,7 +1690,18 @@ if __name__ == "__main__":
         if disable_vlm:
             print(f"[Ablation Mode] VLM (BLIP2) DISABLED - Pure frontier exploration baseline")
 
-        main(cfg, dataset, disable_vlm)
+        # Print real-time hypothesis mode status
+        if realtime_hypothesis:
+            print(f"\n{'='*60}")
+            print(f"[Real-time Hypothesis Mode] ENABLED")
+            print(f"  VLM: {vlm_config['model']} @ {vlm_config['api_url']}")
+            print(f"  LLM: {llm_config['model']} @ {llm_config['api_url']}")
+            print(f"  Skip existing: {skip_existing}")
+            print(f"{'='*60}\n")
+
+        main(cfg, dataset, disable_vlm,
+             realtime_hypothesis, vlm_config, llm_config, skip_existing,
+             control_rate_hz, max_episodes_per_process)
     except Exception as e:
         print(f"Unexpected error occurred: {e}")
         rospy.signal_shutdown("Shutdown due to error")

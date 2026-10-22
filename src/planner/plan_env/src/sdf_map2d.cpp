@@ -7,8 +7,6 @@
  * raycasting-based sensor fusion, and obstacle inflation capabilities. The system integrates
  * depth sensor data with probabilistic occupancy models to create robust spatial representations
  * for path planning and collision avoidance.
- *
- * @author Zager-Zhang
  */
 
 #include <plan_env/sdf_map2d.h>

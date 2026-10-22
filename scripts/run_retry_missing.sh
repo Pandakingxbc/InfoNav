@@ -5,11 +5,12 @@ echo "======================================================================"
 echo "🔄 开始重新测试缺失的 LLM 分析任务"
 echo "======================================================================"
 
-cd /home/yangz/Nav/ApexNav
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+cd "${SCRIPT_DIR}/.."
 
-# 检查 llm_hypothesis_analysis.py 是否存在
-if [ ! -f "llm_hypothesis_analysis.py" ]; then
-    echo "❌ 错误: llm_hypothesis_analysis.py 不存在"
+# 检查统一分析脚本是否存在
+if [ ! -f "scripts/llm_hypothesis_analyzer.py" ]; then
+    echo "❌ 错误: scripts/llm_hypothesis_analyzer.py 不存在"
     exit 1
 fi
 
@@ -31,16 +32,16 @@ EOF
 echo ""
 echo "📌 使用方法:"
 echo "   1. 处理所有缺失的任务 (完整):"
-echo "      python3 retry_missing_tasks.py --env hm3dv2"
+echo "      python3 scripts/llm_hypothesis_analyzer.py retry --env hm3dv2"
 echo ""
 echo "   2. 处理前 10 个任务 (测试):"
-echo "      python3 retry_missing_tasks.py --env hm3dv2 --start 127 --end 140"
+echo "      python3 scripts/llm_hypothesis_analyzer.py retry --env hm3dv2 --start 127 --end 140"
 echo ""
 echo "   3. 处理特定范围 (如 task300-400):"
-echo "      python3 retry_missing_tasks.py --env hm3dv2 --start 300 --end 400"
+echo "      python3 scripts/llm_hypothesis_analyzer.py retry --env hm3dv2 --start 300 --end 400"
 echo ""
 echo "   4. 增加超时时间 (如果出现超时错误):"
-echo "      python3 retry_missing_tasks.py --env hm3dv2 --timeout 180"
+echo "      python3 scripts/llm_hypothesis_analyzer.py retry --env hm3dv2 --delay 10"
 echo ""
 echo "======================================================================"
 echo ""

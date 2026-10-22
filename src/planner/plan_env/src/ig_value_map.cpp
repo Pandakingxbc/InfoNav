@@ -6,8 +6,6 @@
  *
  * This file implements the IGValueMap class which provides exploration
  * guidance by tracking visual-semantic connectivity scores from VLM.
- *
- * @author Zhi Yang
  */
 
 #include <plan_env/ig_value_map.h>
@@ -19,8 +17,9 @@ namespace apexnav_planner {
 
 IGValueMap::IGValueMap(SDFMap2D* sdf_map, ros::NodeHandle& nh)
   : sdf_map_(sdf_map),
-    has_sensor_state_(false),
-    current_sensor_yaw_(0.0)
+    current_sensor_pos_(Vector2d::Zero()),
+    current_sensor_yaw_(0.0),
+    has_sensor_state_(false)
 {
   // Initialize buffers
   int voxel_num = sdf_map_->getVoxelNum();
@@ -31,16 +30,8 @@ IGValueMap::IGValueMap(SDFMap2D* sdf_map, ros::NodeHandle& nh)
   nh.param("ig_value_map/fov_angle_deg", fov_angle_, 79.0);
   fov_angle_ = fov_angle_ * M_PI / 180.0;  // Convert to radians
 
-  // Subscribe to IGScore messages from Habitat
-  ig_score_sub_ = nh.subscribe<plan_env::IGScore>(
-      "/habitat/ig_score",
-      10,
-      &IGValueMap::igScoreCallback,
-      this
-  );
-
   ROS_INFO("[IGValueMap] Initialized with FOV angle %.1f deg", fov_angle_ * 180.0 / M_PI);
-  ROS_INFO("[IGValueMap] Subscribed to /habitat/ig_score");
+  ROS_INFO("[IGValueMap] Updates are synchronized and routed by MapROS");
 }
 
 void IGValueMap::reset()
@@ -113,33 +104,6 @@ double IGValueMap::getFovConfidence(const Vector2d& sensor_pos, const double& se
   // Points in center of FOV get higher confidence
   double value = std::cos(relative_angle / (fov_angle_ / 2) * (M_PI / 2));
   return value * value;  // Square for stronger center weighting
-}
-
-void IGValueMap::igScoreCallback(const plan_env::IGScore::ConstPtr& msg)
-{
-  if (!has_sensor_state_) {
-    ROS_WARN_THROTTLE(5.0, "[IGValueMap] No sensor state available for IG update. "
-                           "Make sure to call updateSensorState() first.");
-    return;
-  }
-
-  if (current_free_grids_.empty()) {
-    ROS_WARN_THROTTLE(5.0, "[IGValueMap] No free grids available for update.");
-    return;
-  }
-
-  // Update IG map with received score
-  updateIGMap(
-      current_sensor_pos_,
-      current_sensor_yaw_,
-      current_free_grids_,
-      msg->ig_score
-  );
-
-  ROS_DEBUG_THROTTLE(2.0, "[IGValueMap] Updated IG map with score %.3f "
-                          "(corridor: %.3f, doorway: %.3f, passage: %.3f)",
-                     msg->ig_score, msg->corridor_score,
-                     msg->doorway_score, msg->passage_score);
 }
 
 double IGValueMap::getAverageIGScore() const

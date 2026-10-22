@@ -7,8 +7,6 @@
  * known free space and unknown regions, performs intelligent clustering using
  * PCA-based subdivision, and provides visibility-based validation for efficient
  * exploration planning.
- *
- * @author Zager-Zhang
  */
 #include <plan_env/frontier_map2d.h>
 #include <unordered_map>

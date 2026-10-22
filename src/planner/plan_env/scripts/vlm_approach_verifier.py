@@ -17,9 +17,6 @@ Synchronous Mode:
 - When VLM verification is triggered, FSM stops outputting actions
 - VLM result determines whether to boost or penalize object confidence
 - 30 second timeout disables VLM for the rest of the episode
-
-Author: InfoNav Team
-Date: 2026-02
 """
 
 import os

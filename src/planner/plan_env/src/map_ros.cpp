@@ -5,8 +5,6 @@
  * This file implements the MapROS class which provides the ROS interface for
  * the 2D signed distance field mapping system. It handles sensor data processing,
  * object detection integration, and real-time map visualization.
- *
- * @author Zager-Zhang
  */
 
 #include <plan_env/map_ros.h>
@@ -114,7 +112,9 @@ void MapROS::init()
   semantic_prompts_sub_ = node_.subscribe(
       "/semantic_prompts", 1, &MapROS::semanticPromptsCallback, this);
   semantic_scores_sub_ = node_.subscribe(
-      "/semantic_scores", 10, &MapROS::semanticScoresCallback, this);
+      "/habitat/semantic_scores", 10, &MapROS::semanticScoresCallback, this);
+  ig_score_sub_ = node_.subscribe(
+      "/habitat/ig_score", 10, &MapROS::igScoreCallback, this);
 
   // Setup subscriber for episode reset signals
   episode_reset_sub_ = node_.subscribe(
@@ -125,6 +125,8 @@ void MapROS::init()
   if (use_multi_source_semantic_) {
     ROS_INFO("[MapROS] Multi-source semantic value map enabled");
   }
+  current_ig_score_ = 0.0;
+  has_current_ig_score_ = false;
 
   // Load Dual-Value Fusion parameter (same as exploration_manager)
   node_.param("exploration/fusion_alpha", fusion_alpha_, 0.5);
@@ -204,18 +206,48 @@ void MapROS::semanticScoresCallback(const plan_env::SemanticScoresConstPtr& msg)
     return;
   }
 
-  // Validate that scores match the number of current prompts
-  if (msg->scores.size() != current_semantic_prompts_.size()) {
-    ROS_WARN("[MapROS] Received %zu scores but have %zu prompts, ignoring",
-             msg->scores.size(), current_semantic_prompts_.size());
+  if (msg->prompts.empty() || msg->scores.size() != msg->prompts.size() ||
+      (!msg->weights.empty() && msg->weights.size() != msg->prompts.size())) {
+    ROS_WARN_THROTTLE(5.0,
+        "[MapROS] Invalid SemanticScores shape: prompts=%zu scores=%zu weights=%zu",
+        msg->prompts.size(), msg->scores.size(), msg->weights.size());
     return;
   }
 
-  // Update semantic scores
+  // The evaluator publishes the complete prompt/weight/score tuple. Build the
+  // per-hypothesis maps directly instead of waiting for /semantic_prompts,
+  // which is not emitted by the main evaluation pipeline.
+  const bool sources_changed =
+      msg->target_object != current_target_object_ ||
+      msg->prompts != current_semantic_prompts_ ||
+      map_->multi_source_value_map_->getNumSemanticSources() !=
+          static_cast<int>(msg->prompts.size());
+  if (sources_changed) {
+    current_target_object_ = msg->target_object;
+    current_semantic_prompts_ = msg->prompts;
+    map_->multi_source_value_map_->clearSemanticSources();
+    for (size_t i = 0; i < msg->prompts.size(); ++i) {
+      const double weight = msg->weights.empty() ? 1.0 : msg->weights[i];
+      map_->multi_source_value_map_->addSemanticSource(msg->prompts[i], weight);
+    }
+    ROS_INFO("[MapROS] Initialized %zu HSVM sources for target '%s' from SemanticScores",
+        msg->prompts.size(), msg->target_object.c_str());
+  }
+
+  // depthPoseCallback projects this vector onto the current free-space grid.
   current_semantic_scores_ = msg->scores;
 
   ROS_DEBUG_THROTTLE(2.0, "[MapROS] Updated semantic scores for %zu sources",
                     msg->scores.size());
+}
+
+void MapROS::igScoreCallback(const plan_env::IGScoreConstPtr& msg)
+{
+  current_ig_score_ = msg->ig_score;
+  has_current_ig_score_ = true;
+  ROS_DEBUG_THROTTLE(2.0,
+      "[MapROS] Buffered IG score %.3f (corridor=%.3f doorway=%.3f passage=%.3f)",
+      msg->ig_score, msg->corridor_score, msg->doorway_score, msg->passage_score);
 }
 
 void MapROS::detectedObjectCloudCallback(const plan_env::MultipleMasksWithConfidenceConstPtr& msg)
@@ -450,9 +482,10 @@ void MapROS::depthPoseCallback(
     }
   }
 
-  // Update IG value map sensor state (actual update happens via ROS callback)
-  if (map_->use_ig_value_map_ && map_->ig_value_map_) {
-    map_->ig_value_map_->updateSensorState(camera_pos, camera_yaw, free_grids);
+  // Project IG with the same pose/free-space grid used for HSVM.
+  if (map_->use_ig_value_map_ && map_->ig_value_map_ && has_current_ig_score_) {
+    map_->ig_value_map_->updateIGMap(
+        camera_pos, camera_yaw, free_grids, current_ig_score_);
   }
 
   double value_map_time = (ros::Time::now() - t1).toSec();
@@ -757,6 +790,8 @@ void MapROS::resetMapForNewEpisode()
   current_semantic_prompts_.clear();
   current_semantic_scores_.clear();
   current_target_object_.clear();
+  current_ig_score_ = 0.0;
+  has_current_ig_score_ = false;
   current_nav_target_object_id_ = -1;  // Reset VLM target tracking
   local_updated_ = false;
   esdf_need_update_ = false;

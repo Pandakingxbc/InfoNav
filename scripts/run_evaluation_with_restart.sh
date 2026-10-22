@@ -1,5 +1,5 @@
 #!/bin/bash
-# Auto-restart evaluation script for ApexNav
+# Auto-restart evaluation script for InfoNav
 # Runs habitat_evaluation in batches with exploration_node restart
 # Only restarts exploration.launch, keeps roscore and rviz running
 
@@ -12,7 +12,7 @@ START_EPISODE=${2:-0}       # Starting episode number
 TOTAL_EPISODES=${3:-1000}   # Total episodes to run
 
 # Conda environment
-CONDA_ENV="sg_apexnav"
+CONDA_ENV="${INFONAV_CONDA_ENV:-infonav}"
 
 # Colors for output
 RED='\033[0;31m'

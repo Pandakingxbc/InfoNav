@@ -1,7 +1,6 @@
 /**
  * @file exploration_manager.cpp
  * @brief Implementation of exploration manager for autonomous semantic navigation
- * @author Zager-Zhang
  *
  * This file implements the ExplorationManager class that handles various
  * exploration strategies including distance-based, semantic-based, hybrid,
@@ -471,28 +470,17 @@ void ExplorationManager::findHighestSemanticsFrontierPolicy(Vector2d cur_pos,
   bool use_ig = ep_->use_ig_fusion_ &&
                 sdf_map_->use_ig_value_map_ &&
                 sdf_map_->ig_value_map_;
+  vector<double> semantic_values, ig_values;
+  computeNormalizedFrontierComponents(frontiers, semantic_values, ig_values, use_ig);
 
   // Compute total value for each frontier
-  for (auto frontier : frontiers) {
-    Vector2i idx;
-    sdf_map_->posToIndex(frontier, idx);
-    auto nbrs = allNeighbors(idx, 2);  // 5x5 neighborhood
-
-    // Find maximum semantic value in local neighborhood
-    double sem_value = sdf_map_->value_map_->getValue(idx);
-    for (auto nbr : nbrs) sem_value = max(sem_value, sdf_map_->value_map_->getValue(nbr));
-
-    // Find maximum IG value in local neighborhood (if enabled)
-    double ig_value = 0.0;
-    if (use_ig) {
-      ig_value = sdf_map_->ig_value_map_->getIGValue(idx);
-      for (auto nbr : nbrs) ig_value = max(ig_value, sdf_map_->ig_value_map_->getIGValue(nbr));
-    }
-
-    // Compute total value using dual-value fusion (HSVM/4 to reduce intensity)
-    double total_value = use_ig ? (alpha * (sem_value / 4.0) + (1.0 - alpha) * ig_value) : (sem_value / 4.0);
-
-    frontier_values.emplace_back(frontier, total_value);
+  for (size_t i = 0; i < frontiers.size(); ++i) {
+    // Both arms use exactly the same normalized HSVM/IG value.  Policy 1
+    // greedily takes its maximum; policy 4 plans a weighted arrival-time tour.
+    const double total_value = use_ig
+        ? alpha * semantic_values[i] + (1.0 - alpha) * ig_values[i]
+        : semantic_values[i];
+    frontier_values.emplace_back(frontiers[i], total_value);
   }
 
   // Sort by semantic value (descending), then by distance (ascending)
@@ -923,6 +911,77 @@ bool ExplorationManager::searchObjectPath(const Vector3d& start,
   return false;
 }
 
+double ExplorationManager::getHSVMValue(const Vector2i& idx)
+{
+  if (!sdf_map_->isInMap(idx))
+    return 0.0;
+  if (sdf_map_->use_multi_source_value_map_ && sdf_map_->multi_source_value_map_)
+    return sdf_map_->multi_source_value_map_->getFusedSemanticValue(idx);
+  return sdf_map_->value_map_->getValue(idx);
+}
+
+double ExplorationManager::getLocalHSVMValue(const Vector2i& idx)
+{
+  double value = getHSVMValue(idx);
+  for (const auto& nbr : allNeighbors(idx, 2)) {
+    if (!sdf_map_->isInMap(nbr) || sdf_map_->getInflateOccupancy(nbr) == 1 ||
+        sdf_map_->getOccupancy(nbr) == SDFMap2D::OCCUPIED)
+      continue;
+    value = std::max(value, getHSVMValue(nbr));
+  }
+  return value;
+}
+
+double ExplorationManager::getLocalIGValue(const Vector2i& idx)
+{
+  if (!sdf_map_->use_ig_value_map_ || !sdf_map_->ig_value_map_ || !sdf_map_->isInMap(idx))
+    return 0.0;
+  double value = sdf_map_->ig_value_map_->getIGValue(idx);
+  for (const auto& nbr : allNeighbors(idx, 2)) {
+    if (!sdf_map_->isInMap(nbr) || sdf_map_->getInflateOccupancy(nbr) == 1 ||
+        sdf_map_->getOccupancy(nbr) == SDFMap2D::OCCUPIED)
+      continue;
+    value = std::max(value, sdf_map_->ig_value_map_->getIGValue(nbr));
+  }
+  return value;
+}
+
+void ExplorationManager::computeNormalizedFrontierComponents(
+    const vector<Vector2d>& frontiers, vector<double>& semantic_values,
+    vector<double>& ig_values, bool use_ig)
+{
+  semantic_values.clear();
+  ig_values.clear();
+  semantic_values.reserve(frontiers.size());
+  ig_values.reserve(frontiers.size());
+  for (const auto& frontier : frontiers) {
+    Vector2i idx;
+    sdf_map_->posToIndex(frontier, idx);
+    semantic_values.push_back(getLocalHSVMValue(idx));
+    ig_values.push_back(use_ig ? getLocalIGValue(idx) : 0.0);
+  }
+
+  auto min_max_normalize = [](vector<double>& values) {
+    if (values.empty())
+      return;
+    const auto bounds = std::minmax_element(values.begin(), values.end());
+    const double minimum = *bounds.first;
+    const double range = *bounds.second - minimum;
+    if (range <= 1e-9) {
+      std::fill(values.begin(), values.end(), 0.0);
+      return;
+    }
+    for (double& value : values)
+      value = (value - minimum) / range;
+  };
+
+  // HSVM and IG have different native scales.  Frontier-wise min-max
+  // normalization makes alpha meaningful and identical in both policies.
+  min_max_normalize(semantic_values);
+  if (use_ig)
+    min_max_normalize(ig_values);
+}
+
 double ExplorationManager::computeAdaptiveAlpha(const vector<Vector2d>& frontiers)
 {
   // Adaptive Alpha (Paper Equation):
@@ -941,24 +1000,13 @@ double ExplorationManager::computeAdaptiveAlpha(const vector<Vector2d>& frontier
     Vector2i idx;
     sdf_map_->posToIndex(frontier, idx);
 
-    // Get semantic value at frontier position
-    double sem_value = sdf_map_->value_map_->getValue(idx);
-
-    // Also check 5x5 neighborhood for maximum
-    auto nbrs = allNeighbors(idx, 2);
-    for (const auto& nbr : nbrs) {
-      if (sdf_map_->getInflateOccupancy(nbr) == 1 ||
-          sdf_map_->getOccupancy(nbr) == SDFMap2D::OCCUPIED)
-        continue;
-      sem_value = std::max(sem_value, sdf_map_->value_map_->getValue(nbr));
-    }
-
-    max_hsvm = std::max(max_hsvm, sem_value);
+    max_hsvm = std::max(max_hsvm, getLocalHSVMValue(idx));
   }
 
   // Compute adaptive alpha with clamping to [alpha_base, 1.0]
-  double alpha = ep_->alpha_base_ + (1.0 - ep_->alpha_base_) * (max_hsvm / ep_->tau_conf_);
-  alpha = std::min(alpha, 1.0);  // Clamp to maximum of 1.0
+  const double tau_conf = std::max(ep_->tau_conf_, 1e-9);
+  double alpha = ep_->alpha_base_ + (1.0 - ep_->alpha_base_) * (max_hsvm / tau_conf);
+  alpha = std::max(ep_->alpha_base_, std::min(alpha, 1.0));
 
   ROS_DEBUG("[AdaptiveAlpha] max_hsvm=%.3f, alpha=%.3f (base=%.2f, tau=%.2f)",
       max_hsvm, alpha, ep_->alpha_base_, ep_->tau_conf_);
@@ -978,45 +1026,20 @@ void ExplorationManager::getSortedSemanticFrontiers(const Vector2d& cur_pos,
   bool use_ig = ep_->use_ig_fusion_ &&
                 sdf_map_->use_ig_value_map_ &&
                 sdf_map_->ig_value_map_;
+  vector<double> semantic_values, ig_values;
+  computeNormalizedFrontierComponents(frontiers, semantic_values, ig_values, use_ig);
 
-  for (auto& frontier : frontiers) {
+  for (size_t i = 0; i < frontiers.size(); ++i) {
     SemanticFrontier sem_frontier;
-    sem_frontier.position = frontier;
-
-    // Compute semantic value from local neighborhood
-    Vector2i idx;
-    sdf_map_->posToIndex(frontier, idx);
-    auto nbrs = allNeighbors(idx, 2);  // 5x5 grid neighborhood
-    double sem_value = sdf_map_->value_map_->getValue(idx);
-
-    // Find maximum semantic value in neighborhood (ignoring occupied cells)
-    for (auto& nbr : nbrs) {
-      if (sdf_map_->getInflateOccupancy(idx) == 1 ||
-          sdf_map_->getOccupancy(idx) == SDFMap2D::OCCUPIED)
-        continue;
-      sem_value = std::max(sem_value, sdf_map_->value_map_->getValue(nbr));
-    }
-
-    // Compute IG value from local neighborhood (if enabled)
-    double ig_value = 0.0;
-    if (use_ig) {
-      ig_value = sdf_map_->ig_value_map_->getIGValue(idx);
-      for (auto& nbr : nbrs) {
-        if (sdf_map_->getInflateOccupancy(idx) == 1 ||
-            sdf_map_->getOccupancy(idx) == SDFMap2D::OCCUPIED)
-          continue;
-        ig_value = std::max(ig_value, sdf_map_->ig_value_map_->getIGValue(nbr));
-      }
-    }
-
-    // Compute total value using dual-value fusion (HSVM/4 to reduce intensity)
-    double total_value = use_ig ? (alpha * (sem_value / 4.0) + (1.0 - alpha) * ig_value) : (sem_value / 4.0);
-    sem_frontier.semantic_value = total_value;  // Store total value
+    sem_frontier.position = frontiers[i];
+    sem_frontier.semantic_value = use_ig
+        ? alpha * semantic_values[i] + (1.0 - alpha) * ig_values[i]
+        : semantic_values[i];
 
     // Validate reachability and compute path cost
     Vector2d tmp_pos;
     vector<Vector2d> tmp_path;
-    if (!searchFrontierPath(cur_pos, frontier, tmp_pos, tmp_path)) {
+    if (!searchFrontierPath(cur_pos, frontiers[i], tmp_pos, tmp_path)) {
       // Assign high cost penalty for unreachable frontiers
       sem_frontier.path_length = 1000000;
       sem_frontier.path.clear();

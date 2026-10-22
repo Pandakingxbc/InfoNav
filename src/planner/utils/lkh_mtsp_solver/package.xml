@@ -4,9 +4,9 @@
   <version>0.0.0</version>
   <description>The mtsp solver package</description>
 
-  <maintainer email="zagerzhang@todo.todo"> zagerzhang</maintainer>
+  <maintainer email="163635413+Pandakingxbc@users.noreply.github.com">Zhi Yang</maintainer>
 
-  <license>GPLv3</license>
+  <license>Research-only (LKH-3 upstream terms)</license>
 
   <buildtool_depend>catkin</buildtool_depend>
   <build_depend>roscpp</build_depend>

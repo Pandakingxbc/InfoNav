@@ -1,0 +1,48 @@
+name: Lightweight quality checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  syntax-and-metadata:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.9"
+      - name: Install metadata validators
+        run: python -m pip install --disable-pip-version-check PyYAML==6.0.2
+      - name: Compile project Python sources
+        run: |
+          git ls-files -z '*.py' \
+            | while IFS= read -r -d '' file; do python -m py_compile "$file"; done
+      - name: Check shell syntax
+        run: |
+          git ls-files -z 'scripts/*.sh' \
+            | while IFS= read -r -d '' file; do bash -n "$file"; done
+      - name: Parse YAML metadata and configuration
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import yaml
+
+          paths = [Path("CITATION.cff"), Path("infonav_environment.yaml")]
+          paths.extend(sorted(Path("config").glob("*.yaml")))
+          paths.extend(sorted(Path(".github/workflows").glob("*.yml")))
+          for path in paths:
+              with path.open(encoding="utf-8") as stream:
+                  yaml.safe_load(stream)
+              print(f"parsed {path}")
+          PY
+      - name: Reject release-blocking placeholders
+        run: |
+          ! grep -RInE 'Under Review|Anonymous Submission|author=\{\}|journal=\{\}' \
+            README.md CITATION.cff docs config pyproject.toml

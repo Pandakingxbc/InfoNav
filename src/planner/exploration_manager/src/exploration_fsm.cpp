@@ -410,7 +410,8 @@ int ExplorationFSM::callActionPlanner()
         } else {
           // Use VLM Approach Verifier for soft arrival validation
           int current_obj_id = expl_manager_->object_map2d_->getCurrentTargetObjectId();
-          if (current_obj_id >= 0 && !fd_->vlm_disabled_this_episode_) {
+          // Only use VLM verification if globally enabled AND not disabled this episode
+          if (current_obj_id >= 0 && vlm_validation_enabled_ && !fd_->vlm_disabled_this_episode_) {
             // Check if VLM already verified this object
             bool vlm_verified = expl_manager_->sdf_map_->object_map2d_->isObjectVLMVerified(current_obj_id);
             if (vlm_verified) {
@@ -450,9 +451,12 @@ int ExplorationFSM::callActionPlanner()
               // Wait for VLM result
               return fd_->final_result_;
             }
-          } else if (fd_->vlm_disabled_this_episode_) {
-            // VLM disabled this episode - trust detector
-            ROS_WARN("[Soft Arrival] VLM disabled, trusting detector at dist=%.2fm", dist_to_target);
+          } else if (!vlm_validation_enabled_ || fd_->vlm_disabled_this_episode_) {
+            // VLM globally disabled OR disabled this episode - trust detector
+            ROS_WARN("[Soft Arrival] VLM disabled (global=%s, episode=%s), trusting detector at dist=%.2fm",
+                     vlm_validation_enabled_ ? "false" : "true",
+                     fd_->vlm_disabled_this_episode_ ? "true" : "false",
+                     dist_to_target);
             if (expl_manager_->isSuspiciousTargetLocked()) {
               expl_manager_->setSuspiciousTargetLock(false);
             }
@@ -517,7 +521,7 @@ int ExplorationFSM::callActionPlanner()
     bool vlm_passed = false;  // Default to false - require VLM verification
     bool vlm_uncertain = false;
 
-    if (current_obj_id >= 0 && !fd_->vlm_disabled_this_episode_) {
+    if (current_obj_id >= 0 && vlm_validation_enabled_ && !fd_->vlm_disabled_this_episode_) {
       vlm_verified = expl_manager_->sdf_map_->object_map2d_->isObjectVLMVerified(current_obj_id);
       if (vlm_verified) {
         vlm_passed = expl_manager_->sdf_map_->object_map2d_->getObjectVLMResult(current_obj_id);
@@ -535,10 +539,12 @@ int ExplorationFSM::callActionPlanner()
           return fd_->final_result_;
         }
       }
-    } else if (fd_->vlm_disabled_this_episode_) {
-      // VLM disabled - trust detector as fallback
+    } else if (!vlm_validation_enabled_ || fd_->vlm_disabled_this_episode_) {
+      // VLM globally disabled OR disabled this episode - trust detector as fallback
       vlm_passed = true;
-      ROS_WARN("[Final Approach] VLM disabled, trusting detector");
+      ROS_WARN("[Final Approach] VLM disabled (global=%s, episode=%s), trusting detector",
+               vlm_validation_enabled_ ? "true" : "false",
+               fd_->vlm_disabled_this_episode_ ? "true" : "false");
     }
 
     ROS_INFO("[Final Approach] VLM validation: obj_id=%d, verified=%s, passed=%s, uncertain=%s",
@@ -622,7 +628,7 @@ int ExplorationFSM::callActionPlanner()
         (current_pos - expl_manager_->ed_->next_pos_).norm() < soft_reach_distance) {
       // Stuck near target - require VLM verification before confirming success
       int current_obj_id = expl_manager_->object_map2d_->getCurrentTargetObjectId();
-      if (current_obj_id >= 0 && !fd_->vlm_disabled_this_episode_) {
+      if (current_obj_id >= 0 && vlm_validation_enabled_ && !fd_->vlm_disabled_this_episode_) {
         bool vlm_verified = expl_manager_->sdf_map_->object_map2d_->isObjectVLMVerified(current_obj_id);
         if (vlm_verified) {
           bool vlm_passed = expl_manager_->sdf_map_->object_map2d_->getObjectVLMResult(current_obj_id);
@@ -646,9 +652,11 @@ int ExplorationFSM::callActionPlanner()
           }
           // Don't return REACH_OBJECT, wait for VLM result
         }
-      } else if (fd_->vlm_disabled_this_episode_) {
-        // VLM disabled - trust detector
-        ROS_WARN("[Stuck Near Target] VLM disabled, trusting detector");
+      } else if (!vlm_validation_enabled_ || fd_->vlm_disabled_this_episode_) {
+        // VLM globally disabled OR disabled this episode - trust detector
+        ROS_WARN("[Stuck Near Target] VLM disabled (global=%s, episode=%s), trusting detector",
+                 vlm_validation_enabled_ ? "true" : "false",
+                 fd_->vlm_disabled_this_episode_ ? "true" : "false");
         resetApproachDetectionCheck();
         resetSoftArrivalTracking();
         final_res = FINAL_RESULT::REACH_OBJECT;
@@ -2678,6 +2686,12 @@ void ExplorationFSM::vlmVerificationResultCallback(const plan_env::VLMVerificati
 
 void ExplorationFSM::triggerVLMVerification(int object_id, int trigger_type, double distance_to_target)
 {
+  // Check if VLM validation is globally disabled
+  if (!vlm_validation_enabled_) {
+    ROS_DEBUG("[VLM] VLM validation globally disabled, skipping verification");
+    return;
+  }
+
   // Check if VLM is disabled for this episode
   if (fd_->vlm_disabled_this_episode_) {
     ROS_WARN("[VLM] VLM disabled for this episode (previous timeout), skipping verification");
@@ -2755,8 +2769,8 @@ void ExplorationFSM::publishObjectUpdateInfo(int object_id, double confidence,
 
 bool ExplorationFSM::checkVLMTriggerConditions(double dist_to_target, int object_id)
 {
-  // Skip if VLM disabled or already waiting
-  if (fd_->vlm_disabled_this_episode_ || fd_->vlm_waiting_) {
+  // Skip if VLM globally disabled, disabled this episode, or already waiting
+  if (!vlm_validation_enabled_ || fd_->vlm_disabled_this_episode_ || fd_->vlm_waiting_) {
     return false;
   }
 

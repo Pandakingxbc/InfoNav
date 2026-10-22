@@ -3,8 +3,6 @@ HTTP-based VLM Client using OpenAI-compatible API
 
 Connects to local VLM service at http://localhost:20004
 Supports vision-language tasks with OpenAI format.
-
-Author: Zager-Zhang
 """
 
 import requests

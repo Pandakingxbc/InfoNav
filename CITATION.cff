@@ -1,0 +1,28 @@
+cff-version: 1.2.0
+message: "If you use InfoNav, please cite the NeurIPS 2026 paper."
+title: "InfoNav"
+type: software
+authors:
+  - family-names: Yang
+    given-names: Zhi
+  - family-names: Yu
+    given-names: Chengpu
+  - family-names: Ferrer
+    given-names: Gonzalo
+repository-code: "https://github.com/Pandakingxbc/InfoNav"
+url: "https://openreview.net/forum?id=lzhhlAlmjK"
+license: GPL-3.0-only
+date-released: 2026-09-25
+preferred-citation:
+  type: conference-paper
+  title: "InfoNav: A Unified Value Framework Integrating Semantic Relevance and Information Gain for Zero-Shot Object Goal Navigation"
+  authors:
+    - family-names: Yang
+      given-names: Zhi
+    - family-names: Yu
+      given-names: Chengpu
+    - family-names: Ferrer
+      given-names: Gonzalo
+  collection-title: "Advances in Neural Information Processing Systems"
+  year: 2026
+  url: "https://openreview.net/forum?id=lzhhlAlmjK"

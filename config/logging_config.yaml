@@ -1,4 +1,4 @@
-# Logging Configuration for ApexNav
+# Logging Configuration for InfoNav
 # Controls verbosity levels across Python and ROS components
 #
 # Usage: Set environment variables before running evaluation

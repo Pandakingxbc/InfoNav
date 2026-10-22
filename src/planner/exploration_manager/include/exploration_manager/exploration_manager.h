@@ -105,6 +105,14 @@ public:
   typedef shared_ptr<ExplorationManager> Ptr;
 
 private:
+  /// Return the active semantic value field.  HM3D value-based policies use
+  /// the fused multi-source HSVM; the legacy scalar map is only a fallback.
+  double getHSVMValue(const Eigen::Vector2i& idx);
+  double getLocalHSVMValue(const Eigen::Vector2i& idx);
+  double getLocalIGValue(const Eigen::Vector2i& idx);
+  void computeNormalizedFrontierComponents(const vector<Vector2d>& frontiers,
+      vector<double>& semantic_values, vector<double>& ig_values, bool use_ig);
+
   // Exploration Policy
   void chooseExplorationPolicy(Vector2d cur_pos, vector<Vector2d> frontiers,
       Vector2d& next_best_pos, vector<Vector2d>& next_best_path);

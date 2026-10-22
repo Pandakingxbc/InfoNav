@@ -9,8 +9,6 @@ These hypotheses cover different semantic perspectives:
 - Structural/layout priors
 
 Reference: Value_Map_Construction_and_Fusion.md - Semantic Prompt Expansion
-
-Author: Zager-Zhang
 """
 
 from typing import List, Tuple, Dict

@@ -4,7 +4,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "habitat2ros"
-version = "0.1.0"
+version = "1.0.0"
 authors = [
-    {name = "Zager-Zhang"},
+    {name = "Zhi Yang"},
+    {name = "Chengpu Yu"},
+    {name = "Gonzalo Ferrer"},
 ]

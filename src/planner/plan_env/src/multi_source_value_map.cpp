@@ -9,8 +9,6 @@
  * 4. Dynamic semantic-geometric fusion with reliability estimation
  *
  * Reference: "Value Map Construction and Fusion" design document
- *
- * @author Zager-Zhang
  */
 
 #include <plan_env/multi_source_value_map.h>
@@ -37,33 +35,18 @@ MultiSourceValueMap::MultiSourceValueMap(SDFMap2D* sdf_map, ros::NodeHandle& nh)
   nh.param("value_map/min_lambda", min_lambda_, 0.2);
   nh.param("value_map/max_lambda", max_lambda_, 0.8);
 
-  // Subscribe to SemanticScores messages from Habitat
-  semantic_scores_sub_ = nh.subscribe<plan_env::SemanticScores>(
-      "/habitat/semantic_scores",
-      10,
-      &MultiSourceValueMap::semanticScoresCallback,
-      this
-  );
-
-  // Subscribe to episode reset signals
-  episode_reset_sub_ = nh.subscribe<std_msgs::Empty>(
-      "/habitat/episode_reset",
-      10,
-      &MultiSourceValueMap::episodeResetCallback,
-      this
-  );
+  // MapROS owns score/reset subscriptions so a frame is projected exactly
+  // once with synchronized pose and free-space geometry.
 
   ROS_INFO("[MultiSourceValueMap] Initialized with rotation sampling %s, %d samples",
       enable_rotation_sampling_ ? "enabled" : "disabled", num_rotation_samples_);
-  ROS_INFO("[MultiSourceValueMap] Subscribed to /habitat/semantic_scores");
-  ROS_INFO("[MultiSourceValueMap] Subscribed to /habitat/episode_reset");
+  ROS_INFO("[MultiSourceValueMap] Updates are synchronized and routed by MapROS");
 }
 
 void MultiSourceValueMap::addSemanticSource(const string& prompt, double weight)
 {
   int buffer_size = sdf_map_->getVoxelNum();
   semantic_sources_.emplace_back(prompt, weight, buffer_size);
-  normalizeWeights();
 
   ROS_INFO("[MultiSourceValueMap] Added semantic source: '%s' (weight: %.3f)",
       prompt.c_str(), weight);
@@ -92,23 +75,6 @@ void MultiSourceValueMap::resetForNewEpisode()
   ROS_INFO("[MultiSourceValueMap] Reset for new episode");
 }
 
-void MultiSourceValueMap::normalizeWeights()
-{
-  if (semantic_sources_.empty())
-    return;
-
-  double sum = 0.0;
-  for (const auto& source : semantic_sources_) {
-    sum += source.weight;
-  }
-
-  if (sum > 1e-6) {
-    for (auto& source : semantic_sources_) {
-      source.weight /= sum;
-    }
-  }
-}
-
 void MultiSourceValueMap::updateSensorState(const Vector2d& sensor_pos,
     const double& sensor_yaw, const vector<Vector2i>& free_grids)
 {
@@ -121,7 +87,8 @@ void MultiSourceValueMap::updateSemanticSource(int source_idx,
     const Vector2d& sensor_pos, const double& sensor_yaw,
     const vector<Vector2i>& free_grids, const double& itm_score)
 {
-  if (source_idx < 0 || source_idx >= semantic_sources_.size()) {
+  if (source_idx < 0 ||
+      static_cast<size_t>(source_idx) >= semantic_sources_.size()) {
     ROS_ERROR("[MultiSourceValueMap] Invalid source index: %d", source_idx);
     return;
   }
@@ -198,12 +165,11 @@ double MultiSourceValueMap::getFusedSemanticValue(const Vector2i& idx)
   int adr = sdf_map_->toAddress(idx);
   double fused_value = 0.0;
 
-  // Weighted sum: V_semantic(p) = Σ w_k * V^(k)_sem(p)
+  // Paper HSVM: V_HSVM(p) = (1/|H|) * Σ_l C_l a_l s_l(p).
   for (const auto& source : semantic_sources_) {
     fused_value += source.weight * source.value_buffer_[adr];
   }
-
-  return fused_value;
+  return fused_value / static_cast<double>(semantic_sources_.size());
 }
 
 double MultiSourceValueMap::getFusedConfidence(const Vector2i& idx)
@@ -218,8 +184,7 @@ double MultiSourceValueMap::getFusedConfidence(const Vector2i& idx)
   for (const auto& source : semantic_sources_) {
     fused_confidence += source.weight * source.confidence_buffer_[adr];
   }
-
-  return fused_confidence;
+  return fused_confidence / static_cast<double>(semantic_sources_.size());
 }
 
 double MultiSourceValueMap::getTotalValue(const Vector2i& idx,
@@ -278,8 +243,6 @@ double MultiSourceValueMap::estimateSemanticReliability()
     variance += (val - mean) * (val - mean);
   }
   variance /= all_semantic_values.size();
-
-  double std_dev = std::sqrt(variance);
 
   // Find max value
   double max_value = *std::max_element(all_semantic_values.begin(),

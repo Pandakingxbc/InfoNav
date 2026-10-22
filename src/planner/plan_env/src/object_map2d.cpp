@@ -6,8 +6,6 @@
  * providing semantic object detection, multi-view fusion, confidence scoring,
  * and 3D point cloud processing capabilities. The system integrates vision-based
  * object detection with occupancy mapping to create robust semantic representations.
- *
- * @author Zhiyang
  */
 
 #include <plan_env/object_map2d.h>

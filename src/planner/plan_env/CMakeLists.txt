@@ -77,6 +77,10 @@ add_library(plan_env
   src/multi_source_value_map.cpp
   src/ig_value_map.cpp
 )
+add_dependencies(plan_env
+  ${${PROJECT_NAME}_EXPORTED_TARGETS}
+  ${catkin_EXPORTED_TARGETS}
+)
 target_link_libraries(plan_env
   ${catkin_LIBRARIES}
   ${PCL_LIBRARIES}

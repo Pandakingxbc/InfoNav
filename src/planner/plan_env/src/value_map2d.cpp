@@ -7,8 +7,6 @@
  * of ITM (Image-Text Matching) scores using field-of-view based confidence modeling.
  *
  * Reference paper "VLFM: Vision-Language Frontier Maps for Zero-Shot Semantic Navigation"
- *
- * @author Zager-Zhang
  */
 
 #include <plan_env/value_map2d.h>

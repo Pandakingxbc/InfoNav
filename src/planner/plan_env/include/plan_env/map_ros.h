@@ -79,6 +79,7 @@ private:
   void detectedObjectCloudCallback(const plan_env::MultipleMasksWithConfidenceConstPtr& msg);
   void semanticPromptsCallback(const plan_env::SemanticPromptsConstPtr& msg);
   void semanticScoresCallback(const plan_env::SemanticScoresConstPtr& msg);
+  void igScoreCallback(const plan_env::IGScoreConstPtr& msg);
   void episodeResetCallback(const std_msgs::Empty::ConstPtr& msg);  ///< Reset callback for new episodes
   void visCallback(const ros::TimerEvent& /*event*/);
 
@@ -134,7 +135,7 @@ private:
 
   // ROS subscribers for sensor data
   ros::Subscriber detected_object_cloud_sub_;
-  ros::Subscriber semantic_prompts_sub_, semantic_scores_sub_;
+  ros::Subscriber semantic_prompts_sub_, semantic_scores_sub_, ig_score_sub_;
   ros::Subscriber episode_reset_sub_;  ///< Subscriber for episode reset signals
 
   // ROS timers for periodic updates
@@ -173,6 +174,8 @@ private:
   vector<double> current_semantic_scores_;   ///< Current ITM scores for each semantic prompt
   string current_target_object_;             ///< Current navigation target object
   bool use_multi_source_semantic_;           ///< Flag to enable multi-source semantic mode
+  double current_ig_score_;                  ///< Latest IG score to project with depth/pose
+  bool has_current_ig_score_;                ///< Whether an IG score arrived this episode
 
   // Dual-Value Fusion parameter (shared with exploration_manager)
   double fusion_alpha_;  ///< Weight for semantic value in V_total = alpha * V_sem + (1-alpha) * V_ig

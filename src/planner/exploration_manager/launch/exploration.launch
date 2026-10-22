@@ -10,6 +10,17 @@
 
   <!-- VLM Validation: set to true to enable VLM-based object validation -->
   <arg name="vlm_validation_enabled" default="false"/>
+  <arg name="exploration_policy" default="4"/>
+  <arg name="use_multi_source" default="true"/>
+  <arg name="fusion_alpha" default="0.8"/>
+  <arg name="use_ig_fusion" default="true"/>
+  <arg name="use_adaptive_alpha" default="true"/>
+  <arg name="alpha_base" default="0.8"/>
+  <arg name="tau_conf" default="0.8"/>
+  <arg name="top_k_value" default="8"/>
+  <arg name="wtrp_temperature" default="0.3"/>
+  <arg name="wtrp_hysteresis_ratio" default="0.8"/>
+  <arg name="wtrp_max_brute_force" default="8"/>
 
   <!-- topic of your odometry such as VIO or LIO -->
   <arg name="odom_topic" value="/habitat/odom" />
@@ -43,6 +54,17 @@
 
     <!-- VLM Validation -->
     <arg name="vlm_validation_enabled_" value="$(arg vlm_validation_enabled)"/>
+    <arg name="exploration_policy_" value="$(arg exploration_policy)"/>
+    <arg name="use_multi_source_" value="$(arg use_multi_source)"/>
+    <arg name="fusion_alpha_" value="$(arg fusion_alpha)"/>
+    <arg name="use_ig_fusion_" value="$(arg use_ig_fusion)"/>
+    <arg name="use_adaptive_alpha_" value="$(arg use_adaptive_alpha)"/>
+    <arg name="alpha_base_" value="$(arg alpha_base)"/>
+    <arg name="tau_conf_" value="$(arg tau_conf)"/>
+    <arg name="top_k_value_" value="$(arg top_k_value)"/>
+    <arg name="wtrp_temperature_" value="$(arg wtrp_temperature)"/>
+    <arg name="wtrp_hysteresis_ratio_" value="$(arg wtrp_hysteresis_ratio)"/>
+    <arg name="wtrp_max_brute_force_" value="$(arg wtrp_max_brute_force)"/>
   </include>
 
   <!-- MP3D dataset uses algorithm_mp3d.xml with MP3D-specific thresholds -->

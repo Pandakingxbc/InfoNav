@@ -3,12 +3,14 @@ requires = ["setuptools>=64"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "ApexNav"
-version = "0.1"
+name = "infonav"
+version = "1.0.0"
 authors = [
-    {name = "Zager-Zhang"},
+    {name = "Zhi Yang"},
+    {name = "Chengpu Yu"},
+    {name = "Gonzalo Ferrer"},
 ]
-description = "ApexNav"
+description = "InfoNav: unified semantic relevance and information gain for zero-shot ObjectNav"
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
@@ -23,15 +25,14 @@ dependencies = [
     "prettytable >= 3.12.0",
     "opencv-python == 4.6.0.66",
     "moviepy == 1.0.3",
-    "mobile_sam @ git+https://github.com/ChaoningZhang/MobileSAM.git",
-    "groundingdino @ git+https://github.com/IDEA-Research/GroundingDINO.git",
+    "mobile_sam @ git+https://github.com/ChaoningZhang/MobileSAM.git@f706ad9c4eb7f219c00d9050e46328518ffb65d2",
+    "groundingdino @ git+https://github.com/IDEA-Research/GroundingDINO.git@856dde20aee659246248e20734ef9ba5214f5e44",
     "ultralytics==8.3.39",
     "fastapi==0.111.1",
     "uvicorn==0.30.3",
     "modelscope==1.16.1",
     "accelerate==0.32.1",
     "openai>=1.58.1",
-    "habitat2ros @ file:./habitat2ros",
     "ollama",
 ]
 
@@ -41,3 +42,12 @@ dev = [
     "pytest >= 7.2.1",
     "pytest-cov >= 4.0.0",
 ]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["basic_utils*", "habitat2ros*", "llm*", "scripts*", "vlm*"]
+exclude = ["vlm.detector.D-FINE*", "vlm.detector.D-FINE.backup*"]
+namespaces = true
+
+[tool.setuptools.package-data]
+llm = ["answers/*.txt"]

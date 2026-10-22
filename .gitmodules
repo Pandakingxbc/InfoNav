@@ -1,0 +1,3 @@
+[submodule "vlm/detector/D-FINE"]
+	path = vlm/detector/D-FINE
+	url = https://github.com/Peterande/D-FINE.git

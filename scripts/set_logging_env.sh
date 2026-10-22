@@ -1,5 +1,5 @@
 #!/bin/bash
-# Set environment variables for ApexNav logging control
+# Set legacy-compatible environment variables for InfoNav logging control
 #
 # Usage:
 #   source scripts/set_logging_env.sh MINIMAL
@@ -9,7 +9,7 @@
 
 LOG_LEVEL=${1:-NORMAL}
 
-echo "Setting ApexNav logging level to: $LOG_LEVEL"
+echo "Setting InfoNav logging level to: $LOG_LEVEL"
 
 # Set Python logging level
 export APEXNAV_LOG_LEVEL=$LOG_LEVEL

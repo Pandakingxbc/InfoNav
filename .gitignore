@@ -6,12 +6,15 @@ data
 debug/
 outputs/
 outputs
+.live_demo_logs/
+.run_state/
 
 # Python cache
 __pycache__/
 *.egg-info
 *.pyc
 *.pyo
+*.backup
 
 # Build artifacts
 build/
@@ -27,6 +30,7 @@ lockfiles/
 yolov7/
 GroundingDINO/
 habitat-lab/
+vlm/detector/D-FINE.backup/
 
 # Model weights and checkpoints
 traced_model.pt
@@ -48,6 +52,7 @@ bag/
 wandb/
 logs/
 tmp/
+*.log
 
 # Python virtual environment
 env/
@@ -64,6 +69,7 @@ videos/
 
 # Test results and generated files
 *.png
+!assets/*.png
 test_*_results.png
 
 # Habitat environment data
@@ -71,3 +77,6 @@ env/
 
 # PDF and documentation artifacts
 *.pdf
+
+# Internal review and rebuttal notes
+rebuttal/
