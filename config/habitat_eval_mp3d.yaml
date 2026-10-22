@@ -24,7 +24,7 @@ habitat:
         dimensionality: 3
     measurements:
       success:
-        success_distance: 0.2
+        success_distance: 1.0
   simulator:
     habitat_sim_v0:
       allow_sliding: false
@@ -68,9 +68,59 @@ llm:
   llm_client:
     llm_client: ollama # deepseek, ollama, or none
     ollama: 'qwen3:8b'
+  # Hierarchical hypothesis level for ablation study (1-4)
+  # L1: target_object only
+  # L2: L1 + room_type
+  # L3: L2 + co_occurrence
+  # L4: L3 + object_part (Full)
+  max_hierarchy_level: 4
+
+# Exploration parameters (override ROS launch defaults for ablation study)
+exploration:
+  # Dual-Value Fusion: V_total = alpha * V_sem + (1-alpha) * V_ig
+  # Set to 1.0 for pure semantic ablation (disable IG)
+  fusion_alpha: 0.8
+  use_ig_fusion: true
 
 record_file_name: "record.txt"
 continue_file_name: "continue.txt"
 need_video: false
 video_output_path: "videos/test_mp3d_{split}"
 test_epi_num: -1
+
+# ============================================================
+# MP3D-specific Patience-Aware Navigation Thresholds
+# ============================================================
+# Lower thresholds to match ApexNav-style behavior (0.25~0.35 range)
+# Formula: τ(t, obj) = tau_high - (t/T_max) × (tau_high - tau_low)
+# ============================================================
+patience_nav:
+  T_max: 450
+  min_detection_confidence: 0.2
+
+  # Global fallback thresholds (unified low range like ApexNav)
+  tau_high: 0.4
+  tau_low: 0.2
+
+  # Target-specific thresholds (all lowered for MP3D)
+  threshold_by_size:
+    # Large objects: bed, couch, sofa, bathtub, fireplace, gym equipment
+    large:
+      tau_high: 0.4
+      tau_low: 0.2
+    # Medium-large objects: tv, tv_monitor, counter, cabinet, shower, seating
+    medium_large:
+      tau_high: 0.4
+      tau_low: 0.2
+    # Medium objects: chair, sink, table, nightstand, stool
+    medium:
+      tau_high: 0.4
+      tau_low: 0.2
+    # Toilet: separate category
+    toilet:
+      tau_high: 0.4
+      tau_low: 0.2
+    # Small objects: plant, potted plant, pillow, towel, clothes
+    small:
+      tau_high: 0.4
+      tau_low: 0.2

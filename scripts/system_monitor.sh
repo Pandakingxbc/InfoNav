@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Comprehensive System Monitor for ApexNav
+# Comprehensive System Monitor for InfoNav
 # Shows: VLM servers, GPU, habitat_evaluation process, disk usage
 
 RED='\033[0;31m'
@@ -14,7 +14,7 @@ NC='\033[0m'
 while true; do
     clear
     echo -e "${CYAN}╔════════════════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${CYAN}║${NC}  ${GREEN}ApexNav System Monitor${NC} - $(date '+%Y-%m-%d %H:%M:%S')                    ${CYAN}║${NC}"
+    echo -e "${CYAN}║${NC}  ${GREEN}InfoNav System Monitor${NC} - $(date '+%Y-%m-%d %H:%M:%S')                    ${CYAN}║${NC}"
     echo -e "${CYAN}╚════════════════════════════════════════════════════════════════════════╝${NC}"
     echo ""
 

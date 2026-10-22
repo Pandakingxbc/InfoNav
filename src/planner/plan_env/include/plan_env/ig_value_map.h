@@ -18,8 +18,6 @@
  *   1. "This view shows a corridor or hallway leading to other areas"
  *   2. "There is a doorway or opening that leads to another room"
  *   3. "This passage connects to multiple rooms or spaces"
- *
- * @author Zhi Yang
  */
 
 #include <ros/ros.h>
@@ -120,11 +118,6 @@ private:
    */
   double normalizeAngle(double angle);
 
-  /**
-   * @brief Callback for IGScore messages from Habitat
-   */
-  void igScoreCallback(const plan_env::IGScore::ConstPtr& msg);
-
   // ==================== Data Members ====================
 
   // Data buffers
@@ -137,10 +130,7 @@ private:
   // Parameters
   double fov_angle_;  ///< Field of view angle (radians)
 
-  // ROS communication
-  ros::Subscriber ig_score_sub_;  ///< Subscriber for IGScore messages
-
-  // Cached sensor state for ROS callback updates
+  // Cached sensor state retained for backwards-compatible direct callers
   Vector2d current_sensor_pos_;
   double current_sensor_yaw_;
   vector<Vector2i> current_free_grids_;

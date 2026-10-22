@@ -1,5 +1,7 @@
 import cv2
 import numpy as np
+import yaml
+from pathlib import Path
 from vlm.coco_classes import COCO_CLASSES
 from vlm.detector.dfine import DFineClient
 from vlm.segmentor.sam import MobileSAMClient
@@ -7,6 +9,26 @@ from vlm.detector.grounding_dino import GroundingDINOClient
 from vlm.itm.blip2itm import BLIP2ITMClient
 from vlm.utils.get_itm_message import get_itm_message
 from vlm.detector.yolov7 import YOLOv7Client
+
+# ============================================================
+# Load VLM Configuration
+# ============================================================
+# Try to load from InfoNav/config/default.yaml
+_config_path = Path(__file__).parent.parent.parent / "config" / "default.yaml"
+if _config_path.exists():
+    with open(_config_path, encoding='utf-8') as f:
+        _VLM_CONFIG = yaml.safe_load(f)
+    print(f"[VLM Config] Loaded from {_config_path}")
+else:
+    _VLM_CONFIG = {}
+    print(f"[VLM Config] File not found at {_config_path}, using defaults")
+
+# Extract VLM server ports (with fallback to hardcoded defaults)
+_BLIP2_PORT = _VLM_CONFIG.get('vlm', {}).get('blip2_itm', {}).get('port', 12182)
+_DINO_PORT = _VLM_CONFIG.get('vlm', {}).get('grounding_dino', {}).get('port', 12181)
+_SAM_PORT = _VLM_CONFIG.get('vlm', {}).get('sam', {}).get('port', 12183)
+_YOLOV7_PORT = _VLM_CONFIG.get('vlm', {}).get('yolov7', {}).get('port', 12184)
+_DFINE_PORT = _VLM_CONFIG.get('vlm', {}).get('dfine', {}).get('port', 12185)
 
 # ============== Detection Mode Configuration ==============
 # Mode 1: YOLOv7 + GroundingDINO (ApexNav original, better false positive reduction)
@@ -16,13 +38,13 @@ from vlm.detector.yolov7 import YOLOv7Client
 # Port configuration matches start_vlm_servers.sh
 
 # COCO object detectors (mutually exclusive based on mode)
-yolov7_detector = YOLOv7Client(port=12184)  # Mode 1: YOLOv7
-dfine_detector = DFineClient(port=12185)    # Mode 2: D-FINE
+yolov7_detector = YOLOv7Client(port=_YOLOV7_PORT)  # Mode 1: YOLOv7
+dfine_detector = DFineClient(port=_DFINE_PORT)    # Mode 2: D-FINE
 
 # Shared components (used in both modes)
-blip2_itm = BLIP2ITMClient(port=12182)
-sam_segmentor = MobileSAMClient(port=12183)
-dino_detector = GroundingDINOClient(port=12181)  # Used for non-COCO objects in both modes
+blip2_itm = BLIP2ITMClient(port=_BLIP2_PORT)
+sam_segmentor = MobileSAMClient(port=_SAM_PORT)
+dino_detector = GroundingDINOClient(port=_DINO_PORT)  # Used for non-COCO objects in both modes
 
 
 def get_segmentation(segmented_img, idx, detections, img, label, score, color):

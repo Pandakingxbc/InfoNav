@@ -10,9 +10,6 @@ Functionality:
 2. Subscribes to /map_ros/depth (or RGB topic) to get current images
 3. Queries BLIP2 ITM service for each prompt
 4. Publishes ITM scores to /semantic_scores
-
-Author: Claude (Anthropic)
-Date: 2025-12-17
 """
 
 import rospy

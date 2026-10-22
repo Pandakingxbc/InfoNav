@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 使用说明：2026-2-1
-#python vlm_environment_analyzer.py single --env hm3dv2 --task 0 --api-type dashscope --model qwen3-vl-flash --env-base-dir /home/yangz/Nav/InfoNav/env
+# python vlm_environment_analyzer.py single --env hm3dv2 --task 0 --api-type dashscope --model qwen3-vl-flash --env-base-dir ./env
 
 VLM 环境感知分析工具 (Unified Version)
 =====================================

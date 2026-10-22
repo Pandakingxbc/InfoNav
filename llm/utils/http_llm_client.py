@@ -3,8 +3,6 @@ HTTP-based LLM Client using OpenAI-compatible API
 
 Connects to local LLM service at http://localhost:20006
 Compatible with OpenAI chat completion format.
-
-Author: Zager-Zhang
 """
 
 import requests

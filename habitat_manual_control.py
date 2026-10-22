@@ -16,8 +16,6 @@ Usage:
 
     # Test specific episode
     python habitat_manual_control.py --dataset hm3dv2 test_epi_num=10
-
-Author: Zager-Zhang
 """
 
 # Standard library imports

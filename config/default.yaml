@@ -1,0 +1,195 @@
+# ============================================================
+# InfoNav Unified Configuration File
+# ============================================================
+# This configuration file centralizes all hardcoded parameters
+# for VLM servers, exploration, and patience-aware navigation.
+#
+# Usage: Parameters are loaded in habitat_evaluation.py
+# If this file is missing, hardcoded defaults will be used (backward compatible).
+# ============================================================
+
+# ============================================================
+# VLM Server Configuration
+# ============================================================
+vlm:
+  # BLIP2-ITM server (Image-Text Matching for semantic scoring)
+  blip2_itm:
+    host: "localhost"
+    port: 12182
+
+    # Parallel BLIP2 configuration (when USE_PARALLEL_BLIP2=true)
+    parallel:
+      enabled: false
+      ports: [12182, 12192]
+
+  # GroundingDINO server (open-vocabulary object detection)
+  grounding_dino:
+    host: "localhost"
+    port: 12181
+
+  # SAM server (Segment Anything Model for object segmentation)
+  sam:
+    host: "localhost"
+    port: 12183
+
+  # YOLOv7 server (Mode 1: ApexNav-style detection)
+  yolov7:
+    host: "localhost"
+    port: 12184
+
+  # D-FINE server (Mode 2: InfoNav detection)
+  dfine:
+    host: "localhost"
+    port: 12185
+
+  # VLM inference thresholds
+  thresholds:
+    # Minimum confidence for VLM-based semantic scoring
+    min_confidence: 0.3
+    # ITM score threshold for positive matches
+    itm_threshold: 0.5
+
+# ============================================================
+# Exploration Parameters
+# ============================================================
+exploration:
+  # Policy selection
+  # 0: distance, 1: value(greedy), 2: value(TSP top-k), 3: distance(TSP all), 4: WTRP(top-k)
+  policy: 4
+
+  # Top-k frontiers for value-based exploration
+  top_k_value: 8
+
+  # Dual-Value Fusion: V_total = alpha * V_sem + (1-alpha) * V_ig
+  fusion_alpha: 0.8
+  use_ig_fusion: true
+
+  # Adaptive Alpha: alpha(t) = alpha_base + (1-alpha_base) * max_fi(V_HSVM(fi)) / tau_conf
+  # When strong semantic cues detected at frontiers, favor exploitation; otherwise explore
+  adaptive_alpha:
+    enabled: true
+    alpha_base: 0.8    # Base alpha when no strong semantic cues (default 0.8)
+    tau_conf: 0.8      # Confidence threshold for alpha adaptation (default 0.8)
+
+  # WTRP: Weighted Traveling Repairman Problem (min weighted arrival time)
+  wtrp:
+    temperature: 0.3
+    hysteresis_ratio: 0.8
+    max_brute_force: 8
+
+# ============================================================
+# Frontier Detection Parameters
+# ============================================================
+frontier:
+  cluster_min: 2
+  cluster_size_xy: 0.65
+  min_view_finish_fraction: 0.2
+  min_contain_unknown: 30
+
+# ============================================================
+# Object Detection and Fusion
+# ============================================================
+object:
+  min_observation_num: 2
+  # 0: no_fusion, 1: ours_fusion, 2: max_fusion
+  fusion_type: 1
+  use_observation: true
+  vis_cloud: true
+
+  # Default detection confidence threshold (used when VLM is disabled)
+  default_detection_confidence: 0.5
+
+# ============================================================
+# Patience-Aware Navigation (Paper Section 3.5)
+# ============================================================
+# Formula: τ(t, obj) = tau_high - (t/T_max) × (tau_high - tau_low)
+# This implements time-decay threshold adaptation for approach verification.
+# ============================================================
+patience_nav:
+  # Maximum episode steps for threshold decay
+  T_max: 450
+
+  # Minimum detection confidence for approach trigger
+  min_detection_confidence: 0.2
+
+  # Global fallback thresholds (for unknown objects)
+  tau_high: 0.4
+  tau_low: 0.2
+
+  # Target-specific thresholds by object size
+  threshold_by_size:
+    # Large objects: bed, couch, sofa, bathtub, fireplace, gym equipment
+    large:
+      tau_high: 0.85
+      tau_low: 0.55
+
+    # Medium-large objects: tv, tv_monitor, counter, cabinet, shower, seating
+    medium_large:
+      tau_high: 0.85
+      tau_low: 0.5
+
+    # Medium objects: chair, sink, table, nightstand, stool
+    medium:
+      tau_high: 0.75
+      tau_low: 0.5
+
+    # Toilet: separate category for fine-tuning
+    toilet:
+      tau_high: 0.75
+      tau_low: 0.45
+
+    # Small objects: plant, potted plant, pillow, towel, clothes
+    small:
+      tau_high: 0.65
+      tau_low: 0.4
+
+# ============================================================
+# VLM Validation (Multi-view Verification)
+# ============================================================
+vlm_validation:
+  enabled: false
+  timeout: 90.0      # Timeout for VLM service call (seconds)
+  num_views: 4       # Number of views for multi-view validation (AND logic)
+
+# ============================================================
+# Path Configuration
+# ============================================================
+paths:
+  # TSP solver directory
+  tsp_dir: "$(find lkh_mtsp_solver)/resource"
+
+  # LLM hypothesis analysis paths
+  llm:
+    env_base_dir: "env"
+    hypothesis_file: "llm_hypothesis_analysis.json"
+
+# ============================================================
+# LLM Hypothesis Hierarchy Configuration (Ablation Study)
+# ============================================================
+# Controls which hierarchical hypothesis levels to use in HSVM
+# L1: target_object only
+# L2: target_object + room_type
+# L3: target_object + room_type + co_occurrence
+# L4: target_object + room_type + co_occurrence + object_part (Full)
+# ============================================================
+llm:
+  # Maximum hierarchy level to use (1-4)
+  # Default: 4 (use all hypothesis levels)
+  # Override with: python habitat_evaluation.py llm.max_hierarchy_level=2
+  max_hierarchy_level: 4
+
+  # Debug output paths
+  debug:
+    base_dir: "debug"
+    stats_file_pattern: "evaluation_stats_{timestamp}.txt"
+
+# ============================================================
+# Logging Configuration Reference
+# ============================================================
+# For detailed logging configuration, see config/logging_config.yaml
+# Environment variables override logging settings:
+#   - APEXNAV_LOG_LEVEL: VERBOSE, NORMAL, MINIMAL, SILENT
+#   - APEXNAV_VLM_DETAIL: true/false
+#   - APEXNAV_TIMING_DETAIL: true/false
+#   - APEXNAV_SEMANTIC_SCORES: true/false
+# ============================================================

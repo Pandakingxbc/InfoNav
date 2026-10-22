@@ -1,5 +1,5 @@
 """
-Logging Manager for ApexNav
+Logging Manager for InfoNav
 
 Provides centralized logging control with environment variable support
 and configuration file integration.
@@ -24,7 +24,7 @@ from typing import Dict, Any
 
 
 class LogManager:
-    """Centralized logging manager for ApexNav"""
+    """Centralized logging manager for InfoNav."""
 
     # Log levels
     VERBOSE = "VERBOSE"

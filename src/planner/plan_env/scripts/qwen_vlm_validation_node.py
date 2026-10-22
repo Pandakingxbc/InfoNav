@@ -25,9 +25,6 @@ Environment Variables:
 
 API Documentation:
     https://help.aliyun.com/zh/model-studio/
-
-Author: InfoNav Team
-Date: 2026-01-23
 """
 
 import os

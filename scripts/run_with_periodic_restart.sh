@@ -60,7 +60,7 @@ BLUE='\033[0;34m'
 NC='\033[0m'
 
 echo -e "${BLUE}╔════════════════════════════════════════════════╗${NC}"
-echo -e "${BLUE}║   ApexNav Periodic Restart Evaluation         ║${NC}"
+echo -e "${BLUE}║   InfoNav Periodic Restart Evaluation         ║${NC}"
 echo -e "${BLUE}╠════════════════════════════════════════════════╣${NC}"
 echo -e "${BLUE}║  Dataset: ${DATASET}${NC}"
 echo -e "${BLUE}║  Episodes per batch: ${EPISODES_PER_BATCH}${NC}"

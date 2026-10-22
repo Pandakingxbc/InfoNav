@@ -17,7 +17,7 @@ VLM Environment Awareness Prompt Templates
 import json
 from typing import List, Dict, Any
 
-# yangzhi_12_23: 拟采用的promot模板
+# VLM environment awareness prompt template
 prompt = f"""
     You are searching for **{target_object}** in an indoor environment.
     Four images show the same location:Image 0=front, Image 1=left, Image 2=back, Image 3=right.

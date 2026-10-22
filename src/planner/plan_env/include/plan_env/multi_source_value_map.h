@@ -48,7 +48,7 @@ struct SemanticSource {
  *
  * 1. Multi-source semantic value maps: Each semantic hypothesis gets its own value map
  * 2. Rotation sampling: VLM evaluates environment at multiple yaw angles before LLM reasoning
- * 3. Weighted fusion: Combines multiple semantic sources with confidence weighting
+ * 3. Paper HSVM aggregation: averages C_l a_l s_l over hypotheses
  * 4. Geometry value integration: Supports fusion with frontier-based geometric exploration
  *
  * Reference: Value_Map_Construction_and_Fusion.md
@@ -63,7 +63,7 @@ public:
   /**
    * @brief Add a new semantic source (semantic hypothesis)
    * @param prompt Semantic text prompt for VLM evaluation
-   * @param weight Fusion weight (default 1.0, will be normalized)
+   * @param weight Paper weight C_l*a_l (default 1.0; not sum-normalized)
    */
   void addSemanticSource(const string& prompt, double weight = 1.0);
 
@@ -122,7 +122,7 @@ public:
   /**
    * @brief Get fused semantic value at a position
    *
-   * Implements: V_semantic(p) = Σ w_k * V^(k)_sem(p)
+   * Implements: V_semantic(p) = (1/|H|) Σ w_k * V^(k)_sem(p)
    *
    * @param pos Query position in world coordinates
    * @return Fused semantic value
@@ -185,11 +185,6 @@ private:
    * @brief Normalize angle to [-π, π]
    */
   double normalizeAngle(double angle);
-
-  /**
-   * @brief Normalize semantic source weights to sum to 1.0
-   */
-  void normalizeWeights();
 
   /**
    * @brief Callback for SemanticScores messages from Habitat
